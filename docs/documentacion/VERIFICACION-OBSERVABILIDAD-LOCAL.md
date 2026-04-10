@@ -136,6 +136,14 @@ URL: http://localhost:3001 → Connections → Data sources
 
 **Resultado:**
 ![data-sources](../screenshots/data-sources.png)
+
+**Nota — Tempo (trazas distribuidas):**
+
+Tempo **no está configurado en Docker Compose** de forma intencionada. Las trazas distribuidas solo aportan valor real cuando hay múltiples servicios corriendo en nodos distintos — exactamente el escenario de Kubernetes con varios pods y nodos.
+
+En el stack local (Docker Compose), todos los servicios comparten red y proceso; instrumentar trazas aquí no refleja el comportamiento real en producción.
+
+Tempo se añade como datasource en Grafana **en el stack de Kubernetes** (`k8s/infrastructure/base/observability/`) junto con el resto del stack de observabilidad completo (kube-prometheus-stack, Loki, Promtail, Tempo).
 ---
 
 ## 6. Grafana — Explorar logs en Loki
