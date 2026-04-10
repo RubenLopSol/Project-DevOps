@@ -1,0 +1,36 @@
+# Wave 3 — Promtail (log collector DaemonSet)
+# Deploys after observability-prometheus (wave 2) so that ServiceMonitor CRDs are
+# available. Deploys alongside loki (also wave 3); ordering within the wave does
+# not matter because Promtail retries its Loki push endpoint until it is ready.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: promtail
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: openpanel
+  source:
+    repoURL: https://github.com/RubenLopSol/proyecto-final-devops.git
+    targetRevision: master
+    # Set by overlays/*/argocd/patches/app-env.yaml — never hardcoded here
+    path: PLACEHOLDER
+    kustomize: {}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

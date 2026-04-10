@@ -1,0 +1,35 @@
+# =============================================================================
+# Loki — STAGING overrides
+# Merged on top of k8s/infrastructure/base/observability/loki/values.yaml
+# Base values are already Minikube-sized; this file keeps the same sizing
+# but explicitly documents the staging intent.
+# =============================================================================
+
+singleBinary:
+  replicas: 1
+  # local-path creates the PV directory on the node where the pod is scheduled.
+  persistence:
+    storageClass: local-path
+  # Loki needs enough CPU to serve gRPC keepalive pings from the distributor
+  # alongside HTTP requests. 100m caused DeadlineExceeded on the internal
+  # ingester healthcheck pool, which /ready then reported as 503.
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# loki-canary runs a DaemonSet (one pod per node = 3 pods in this cluster)
+# that constantly opens websocket tail connections and fires queries.
+# In a single-node SingleBinary staging setup this load causes the ingester
+# gRPC healthchecks to time out, making /ready return 503 repeatedly.
+# Disable it — the canary is a production SLO tool, not needed in staging.
+lokiCanary:
+  enabled: false
+
+# The chart validate.yaml enforces: if test.enabled then lokiCanary.enabled.
+# Disable the Helm test job so the chart renders without the canary.
+test:
+  enabled: false

@@ -1,0 +1,16 @@
+# =============================================================================
+# PROD overlay — infrastructure aggregator (pure Kustomize)
+#
+# Aggregates the pure-Kustomize infrastructure components for prod.
+# Observability is excluded — it requires --enable-helm and is validated
+# separately in CI: kustomize build --enable-helm .../prod/observability
+# Sealed-secrets is also excluded — it uses --enable-helm.
+#
+# CI build: kustomize build k8s/infrastructure/overlays/prod
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - minio
+  - velero

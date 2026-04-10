@@ -1,0 +1,83 @@
+# Prod path patches — switches every Application CR from staging to prod overlay.
+# Applied by overlays/prod/argocd/kustomization.yaml as a strategic merge patch.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sealed-secrets
+  namespace: argocd
+spec:
+  source:
+    path: k8s/infrastructure/overlays/prod/sealed-secrets
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: prometheus
+  namespace: argocd
+spec:
+  source:
+    path: k8s/infrastructure/overlays/prod/observability/kube-prometheus-stack
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki
+  namespace: argocd
+spec:
+  source:
+    path: k8s/infrastructure/overlays/prod/observability/loki
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: promtail
+  namespace: argocd
+spec:
+  source:
+    path: k8s/infrastructure/overlays/prod/observability/promtail
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tempo
+  namespace: argocd
+spec:
+  source:
+    path: k8s/infrastructure/overlays/prod/observability/tempo
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: minio
+  namespace: argocd
+spec:
+  source:
+    path: k8s/infrastructure/overlays/prod/minio
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: velero-operator
+  namespace: argocd
+spec:
+  source:
+    path: k8s/infrastructure/overlays/prod/velero-operator
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: velero
+  namespace: argocd
+spec:
+  source:
+    path: k8s/infrastructure/overlays/prod/velero
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: openpanel
+  namespace: argocd
+spec:
+  source:
+    path: k8s/apps/overlays/prod

@@ -1,0 +1,126 @@
+# =============================================================================
+# ServiceMonitors — OpenPanel application components
+#
+# openpanel-api: Node.js app exposing prom-client metrics on :3000/metrics
+#   - http_request_duration_seconds{method, route, status_code} — histogram (RED)
+#   - nodejs_eventloop_lag_* — event loop health
+#   - nodejs_heap_size_used_bytes — memory pressure
+#   - process_cpu_seconds_total — CPU usage
+#
+# Prometheus Operator discovers these CRs and adds scrape targets.
+# The label `release: kube-prometheus-stack` must match the Prometheus CR's
+# serviceMonitorSelector.matchLabels so the operator picks them up.
+#
+# Metrics ports must be defined on the corresponding Services.
+# Each exporter runs as a sidecar inside the same pod as the main container:
+#   postgres  → postgres-exporter  on :9187
+#   redis     → redis-exporter     on :9121
+#   clickhouse → native /metrics   on :9363
+#
+# relabelings: copy the pod's `app` label into the scraped metric labels so
+# that up{app="openpanel-api"}, up{app="postgres"} etc. work as expected.
+# Without this, the Prometheus Operator drops pod labels from metric labels.
+# =============================================================================
+
+---
+# OpenPanel API — prom-client Node.js metrics + HTTP RED metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: openpanel-api
+  namespace: openpanel
+  labels:
+    app: openpanel-api
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: openpanel-api
+  namespaceSelector:
+    matchNames:
+      - openpanel
+  endpoints:
+    - port: metrics
+      interval: 15s
+      scrapeTimeout: 10s
+      path: /metrics
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_label_app]
+          targetLabel: app
+        - sourceLabels: [__meta_kubernetes_pod_label_version]
+          targetLabel: version
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: postgres-exporter
+  namespace: openpanel
+  labels:
+    app: postgres
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: postgres
+  namespaceSelector:
+    matchNames:
+      - openpanel
+  endpoints:
+    - port: metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      path: /metrics
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_label_app]
+          targetLabel: app
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: redis-exporter
+  namespace: openpanel
+  labels:
+    app: redis
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: redis
+  namespaceSelector:
+    matchNames:
+      - openpanel
+  endpoints:
+    - port: metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      path: /metrics
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_label_app]
+          targetLabel: app
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: clickhouse
+  namespace: openpanel
+  labels:
+    app: clickhouse
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: clickhouse
+  namespaceSelector:
+    matchNames:
+      - openpanel
+  endpoints:
+    - port: metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      path: /metrics
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_label_app]
+          targetLabel: app

@@ -1,0 +1,49 @@
+# =============================================================================
+# Base — OpenPanel application layer
+#
+# Defines all resources for the OpenPanel stack: API (blue/green), Dashboard,
+# Worker, PostgreSQL, ClickHouse, Redis, Ingress, and NetworkPolicies.
+# Environment-specific tuning (replicas, resources, TLS) is applied via
+# overlays/staging and overlays/prod.
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: openpanel
+
+resources:
+  # Config
+  - configmap.yaml
+  # API (Blue-Green)
+  - api-deployment-blue.yaml
+  - api-deployment-green.yaml
+  - api-service.yaml
+  # Dashboard
+  - start-deployment.yaml
+  - start-service.yaml
+  # DB migrations (runs as ArgoCD PreSync hook before every deploy)
+  - migrate-job.yaml
+  # Worker
+  - worker-deployment.yaml
+  # PostgreSQL
+  - postgres-statefulset.yaml
+  - postgres-service.yaml
+  # ClickHouse
+  - clickhouse-configmap.yaml
+  - clickhouse-statefulset.yaml
+  - clickhouse-service.yaml
+  # Redis
+  - redis-deployment.yaml
+  - redis-service.yaml
+  # Networking
+  - ingress.yaml
+  - network-policies.yaml
+  # Observability — ServiceMonitors picked up by Prometheus Operator
+  - servicemonitors.yaml
+  # Grafana dashboards — sidecar picks up ConfigMaps labelled grafana_dashboard=1
+  - grafana-dashboards-configmap.yaml
+
+labels:
+  - pairs:
+      project: openpanel
+    includeSelectors: false

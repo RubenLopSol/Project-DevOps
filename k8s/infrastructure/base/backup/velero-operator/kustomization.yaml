@@ -1,0 +1,30 @@
+# =============================================================================
+# BASE — Velero Operator
+#
+# Renders the vmware-tanzu/velero Helm chart via kustomize's
+# helmChartInflationGenerator. This installs the Velero controller, node-agent
+# DaemonSet, and all CRDs (BackupStorageLocation, Schedule, Backup, Restore…).
+#
+# The environment-specific backend configuration (S3 endpoint, bucket, credentials)
+# is provided by the staging/prod overlay additionalValuesFiles.
+#
+# Prerequisites:
+#   - The velero namespace must exist (created by namespaces app, wave 0)
+#   - Credentials Secret must exist before the chart is applied
+#     (staging: created inline via credentials.secretContents)
+#     (prod: IRSA — no credentials needed, pod identity provides access)
+#
+# Standalone build (staging):
+#   kustomize build --enable-helm k8s/infrastructure/overlays/staging/velero-operator
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+helmCharts:
+  - name: velero
+    repo: https://vmware-tanzu.github.io/helm-charts
+    version: "8.0.0"
+    releaseName: velero
+    namespace: velero
+    includeCRDs: true
+    valuesFile: values.yaml

@@ -1,0 +1,21 @@
+# Prod BackupStorageLocation patch
+# Overrides the base (which points to in-cluster MinIO) to use real AWS S3.
+# Bucket and region are provisioned by terraform/environments/prod.
+#
+# Bucket name matches terraform/environments/prod/variables.tf default.
+# No s3Url — traffic goes directly to AWS S3 endpoints.
+# No s3ForcePathStyle — AWS S3 uses virtual-hosted-style URLs.
+#
+# Velero authenticates via IRSA: the pod's ServiceAccount is annotated with
+# the IAM Role ARN from terraform output velero_role_arn. No credentials file.
+apiVersion: velero.io/v1
+kind: BackupStorageLocation
+metadata:
+  name: default
+  namespace: velero
+spec:
+  provider: aws
+  objectStorage:
+    bucket: openpanel-velero-backups-prod
+  config:
+    region: us-east-1

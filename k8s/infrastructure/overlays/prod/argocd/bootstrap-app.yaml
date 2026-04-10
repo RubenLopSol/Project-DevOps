@@ -1,0 +1,36 @@
+# =============================================================================
+# App of Apps — Bootstrap Application (prod)
+#
+# Applied once manually to register ArgoCD into itself.
+# After this single kubectl apply, ArgoCD watches the prod overlay and manages
+# all Application CRs with prod paths and prod resource settings.
+#
+# Apply:
+#   kubectl apply -f k8s/infrastructure/overlays/prod/argocd/bootstrap-app.yaml
+# =============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: bootstrap
+  namespace: argocd
+  labels:
+    environment: prod
+    project: openpanel
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/RubenLopSol/proyecto-final-devops.git
+    targetRevision: master
+    path: k8s/infrastructure/overlays/prod/argocd
+    kustomize: {}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false

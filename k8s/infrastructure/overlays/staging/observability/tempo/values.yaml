@@ -1,0 +1,5 @@
+# =============================================================================
+# Tempo — STAGING overrides
+# Merged on top of k8s/infrastructure/base/observability/tempo/values.yaml
+# No staging-specific overrides needed — base values fit all environments.
+# =============================================================================

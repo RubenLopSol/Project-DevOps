@@ -1,0 +1,47 @@
+# Wave 3 — OpenPanel application, after infrastructure is healthy
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: openpanel
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: openpanel
+  source:
+    repoURL: https://github.com/RubenLopSol/proyecto-final-devops.git
+    targetRevision: master
+    # Set by overlays/*/argocd/patches/app-env.yaml — never hardcoded here
+    path: PLACEHOLDER
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: openpanel
+  # volumeClaimTemplates is immutable once a StatefulSet is created.
+  # The staging overlay sets storageClassName: local-path, which is correct for
+  # fresh deploys (StatefulSets will be created with local-path from the start).
+  # For existing clusters bootstrapped before this patch was added, the StatefulSets
+  # retain their original storageClass and ArgoCD cannot patch the immutable field.
+  # TODO: remove this ignoreDifferences once staging is rebuilt from scratch —
+  # on a fresh cluster the field will match and this entry becomes a no-op.
+  ignoreDifferences:
+    - group: apps
+      kind: StatefulSet
+      jsonPointers:
+        - /spec/volumeClaimTemplates
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

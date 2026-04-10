@@ -1,0 +1,9 @@
+# Strategic merge patch — api-blue deployment for prod
+# Scales to 3 replicas for HA. Resource limits stay at base values.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openpanel-api-blue
+  namespace: openpanel
+spec:
+  replicas: 3

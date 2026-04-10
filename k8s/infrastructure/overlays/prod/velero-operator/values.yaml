@@ -1,0 +1,40 @@
+# =============================================================================
+# Velero — PROD overrides
+# Backend: AWS S3 with IRSA (IAM Roles for Service Accounts)
+#
+# No static credentials — the pod identity (IRSA annotation on the ServiceAccount)
+# provides temporary credentials directly from AWS STS.
+# The role ARN is set by Terraform and passed as a SA annotation.
+# =============================================================================
+
+# IRSA: no credentials needed — pod identity provides access.
+credentials:
+  useSecret: false
+
+serviceAccount:
+  server:
+    annotations:
+      # Replaced by Terraform with the actual IAM role ARN at deployment time.
+      # See terraform/environments/prod/outputs.tf → velero_role_arn
+      eks.amazonaws.com/role-arn: "arn:aws:iam::ACCOUNT_ID:role/velero-prod-role"
+
+# BackupStorageLocation is managed declaratively by the 'velero' ArgoCD app
+# (k8s/infrastructure/overlays/prod/velero). Do not configure it here to
+# avoid SharedResourceWarning from two apps owning the same resource.
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+nodeAgent:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 256Mi

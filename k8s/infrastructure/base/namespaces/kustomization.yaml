@@ -1,0 +1,13 @@
+# =============================================================================
+# Base — cluster namespaces
+#
+# Defines all namespaces required by the project. Applied first (sync-wave 0)
+# so every other component has a namespace to deploy into.
+#
+# Namespaces: openpanel, observability, backup, velero, sealed-secrets
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespaces.yaml

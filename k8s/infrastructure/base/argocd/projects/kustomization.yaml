@@ -1,0 +1,11 @@
+# =============================================================================
+# BASE — ArgoCD AppProject
+#
+# Defines the openpanel AppProject: which repos, namespaces, and cluster
+# resource types ArgoCD Applications in this project are allowed to manage.
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - openpanel-project.yaml

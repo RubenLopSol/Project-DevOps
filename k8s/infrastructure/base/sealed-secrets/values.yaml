@@ -1,0 +1,52 @@
+# =============================================================================
+# Sealed Secrets Controller — Helm values
+#
+# Chart: sealed-secrets/sealed-secrets  (version: 2.16.1)
+# Docs:  https://github.com/bitnami-labs/sealed-secrets/tree/main/helm/sealed-secrets
+#
+# Rendered via helmChartInflationGenerator — applied through the env overlay:
+#   kustomize build --enable-helm k8s/infrastructure/overlays/staging/sealed-secrets | kubectl apply -f -
+#   kustomize build --enable-helm k8s/infrastructure/overlays/prod/sealed-secrets   | kubectl apply -f -
+# =============================================================================
+
+# ---- Controller ----
+fullnameOverride: sealed-secrets
+
+# Only one replica needed — the controller holds the key and handles decryption.
+# Multiple replicas would require key synchronisation between pods.
+replicaCount: 1
+
+# ---- Resources ----
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+# ---- Node placement ----
+# The controller must be reachable by all namespaces so it runs on the
+# app node (workload=app) alongside the workloads it serves.
+nodeSelector:
+  workload: app
+
+# ---- Metrics ----
+# Expose a /metrics endpoint so Prometheus can scrape controller health.
+metrics:
+  serviceMonitor:
+    enabled: false   # set true if kube-prometheus-stack is already installed
+  service:
+    port: 8081
+
+# ---- Security ----
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 65534
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]

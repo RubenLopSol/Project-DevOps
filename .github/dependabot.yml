@@ -1,0 +1,75 @@
+version: 2
+
+# Dependabot automatically checks for new dependency versions and opens a PR
+# for each available update. Just review and merge.
+#
+# Three types of dependencies are covered:
+#
+#   github-actions — actions used in workflows (actions/checkout, etc.)
+#   npm            — Node.js packages used by the OpenPanel application
+#   docker         — base images in the three Dockerfiles (node:22-alpine, etc.)
+#
+# All are set to check daily.
+
+updates:
+
+  # GitHub Actions
+  # Scans all "uses: action@version" lines in the workflows
+  # and proposes updates when a new version is released.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    commit-message:
+      prefix: "chore(ci)"
+    labels:
+      - "dependencies"
+      - "ci"
+
+  # npm packages (managed with pnpm)
+  # Reads package.json and pnpm-lock.yaml from the OpenPanel application.
+  # Capped at 10 open PRs at a time to avoid flooding the repo,
+  # since there are many transitive dependencies.
+  - package-ecosystem: "npm"
+    directory: "/openpanel"
+    schedule:
+      interval: "daily"
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - "dependencies"
+      - "javascript"
+    open-pull-requests-limit: 10
+
+  # Docker base images — one block per service because Dependabot
+  # needs to point to the directory where each Dockerfile lives.
+
+  - package-ecosystem: "docker"
+    directory: "/openpanel/apps/api"
+    schedule:
+      interval: "daily"
+    commit-message:
+      prefix: "chore(docker)"
+    labels:
+      - "dependencies"
+      - "docker"
+
+  - package-ecosystem: "docker"
+    directory: "/openpanel/apps/start"
+    schedule:
+      interval: "daily"
+    commit-message:
+      prefix: "chore(docker)"
+    labels:
+      - "dependencies"
+      - "docker"
+
+  - package-ecosystem: "docker"
+    directory: "/openpanel/apps/worker"
+    schedule:
+      interval: "daily"
+    commit-message:
+      prefix: "chore(docker)"
+    labels:
+      - "dependencies"
+      - "docker"

@@ -1,0 +1,234 @@
+# Default deny all ingress/egress in openpanel namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: openpanel
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# Allow DNS for all pods
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: openpanel
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# API: allow ingress from Ingress Controller, from Start, and from Prometheus scraping
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-ingress
+  namespace: openpanel
+spec:
+  podSelector:
+    matchLabels:
+      app: openpanel-api
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+        - podSelector:
+            matchLabels:
+              app: openpanel-start
+      ports:
+        - port: 3000
+    # Allow Prometheus to scrape /metrics on :3000
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+      ports:
+        - port: 3000
+---
+# API: allow egress to databases
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-egress
+  namespace: openpanel
+spec:
+  podSelector:
+    matchLabels:
+      app: openpanel-api
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgres
+      ports:
+        - port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app: clickhouse
+      ports:
+        - port: 8123
+        - port: 9000
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - port: 6379
+---
+# Worker: allow egress to databases
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-worker-egress
+  namespace: openpanel
+spec:
+  podSelector:
+    matchLabels:
+      app: openpanel-worker
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgres
+      ports:
+        - port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app: clickhouse
+      ports:
+        - port: 8123
+        - port: 9000
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - port: 6379
+---
+# Start (Dashboard): allow ingress from Ingress Controller
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-start-ingress
+  namespace: openpanel
+spec:
+  podSelector:
+    matchLabels:
+      app: openpanel-start
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - port: 3000
+---
+# Start: allow egress to API
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-start-egress
+  namespace: openpanel
+spec:
+  podSelector:
+    matchLabels:
+      app: openpanel-start
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: openpanel-api
+      ports:
+        - port: 3000
+---
+# Prometheus: allow scraping exporters from observability namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-scraping
+  namespace: openpanel
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: [redis, postgres, clickhouse]
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+      ports:
+        - port: 9121
+        - port: 9187
+        - port: 9363
+---
+# Migrate job: allow egress to postgres only (runs prisma migrate deploy)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-migrate-egress
+  namespace: openpanel
+spec:
+  podSelector:
+    matchLabels:
+      job-name: openpanel-migrate
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgres
+      ports:
+        - port: 5432
+---
+# Databases: only accept from API, Worker, and migrate job
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-db-ingress
+  namespace: openpanel
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: [postgres, clickhouse, redis]
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values: [openpanel-api, openpanel-worker]
+        - podSelector:
+            matchLabels:
+              job-name: openpanel-migrate

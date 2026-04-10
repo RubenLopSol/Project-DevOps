@@ -1,0 +1,21 @@
+# Strategic merge patch — api-blue deployment for dev
+# Scales to 1 replica (base has 2) and reduces resource requests
+# so Minikube doesn't OOM with all services running simultaneously.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openpanel-api-blue
+  namespace: openpanel
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: api
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi

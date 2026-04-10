@@ -1,0 +1,92 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: openpanel-migrate
+  namespace: openpanel
+  labels:
+    app: openpanel-migrate
+  annotations:
+    # Sync hook (not PreSync) so postgres is already deployed in wave 0.
+    # Wave 5 ensures this runs after all wave-0 resources (postgres, redis,
+    # clickhouse) are healthy — the init container then waits for postgres
+    # to accept connections before the migration is attempted.
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  ttlSecondsAfterFinished: 3600
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: openpanel-migrate
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      nodeSelector:
+        workload: app
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.36.1
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for postgres to accept connections..."
+              until nc -z postgres 5432; do
+                echo "postgres not ready, retrying in 5s..."
+                sleep 5
+              done
+              echo "postgres is ready"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
+      containers:
+        - name: migrate
+          image: ghcr.io/rubenlopsol/openpanel-api:main-aef4b94
+          # Run prisma migrate deploy from the db package directory
+          command:
+            - node_modules/.bin/prisma
+            - migrate
+            - deploy
+          workingDir: /app/packages/db
+          env:
+            - name: HOME
+              value: /tmp
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: openpanel-secrets
+                  key: DATABASE_URL
+            - name: DATABASE_URL_DIRECT
+              valueFrom:
+                secretKeyRef:
+                  name: openpanel-secrets
+                  key: DATABASE_URL_DIRECT
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL

@@ -1,0 +1,19 @@
+# Override postgres StorageClass to local-path for staging.
+# local-path provisioner (rancher.io/local-path) creates the PV directory on the
+# node where the pod is actually scheduled, so the workload=app nodeSelector is
+# respected without needing to know which node the provisioner runs on.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: openpanel
+spec:
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 5Gi

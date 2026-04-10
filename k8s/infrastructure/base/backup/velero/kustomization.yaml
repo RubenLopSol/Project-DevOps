@@ -1,0 +1,16 @@
+# NOTE: These resources require the Velero operator to be pre-installed.
+# Install Velero first: velero install ...
+# Then apply: kustomize build k8s/infrastructure/base/backup/velero | kubectl apply -f -
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: velero
+
+resources:
+  - backup-location.yaml
+  - schedule.yaml
+
+labels:
+  - pairs:
+      project: openpanel-backup
+    includeSelectors: false

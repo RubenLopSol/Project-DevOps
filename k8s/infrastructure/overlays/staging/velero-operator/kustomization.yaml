@@ -1,0 +1,24 @@
+# =============================================================================
+# Velero Operator — STAGING overlay
+#
+# Installs the Velero operator with LocalStack as the S3 backend.
+# LocalStack must be running in the cluster (provisioned by Terraform staging env).
+#
+# Standalone build:
+#   kustomize build --enable-helm --load-restrictor LoadRestrictionsNone \
+#     k8s/infrastructure/overlays/staging/velero-operator
+# =============================================================================
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+helmCharts:
+  - name: velero
+    repo: https://vmware-tanzu.github.io/helm-charts
+    version: "8.0.0"
+    releaseName: velero
+    namespace: velero
+    includeCRDs: true
+    valuesFile: ../../../base/backup/velero-operator/values.yaml
+    additionalValuesFiles:
+      - values.yaml

@@ -1,0 +1,35 @@
+# =============================================================================
+# PROD overlay — ArgoCD
+#
+# Renders ArgoCD Helm chart with prod values (real hostname, TLS, larger resources)
+# and patches all Application CRs to point at overlays/prod/* paths.
+#
+# Install: ./scripts/install-argocd.sh prod
+# Build:   kustomize build --enable-helm k8s/infrastructure/overlays/prod/argocd
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../../base/argocd/applications
+  - ../../../base/argocd/projects
+
+helmCharts:
+  - name: argo-cd
+    repo: https://argoproj.github.io/argo-helm
+    version: "7.7.0"
+    releaseName: argocd
+    namespace: argocd
+    valuesFile: ../../../base/argocd/install/values.yaml
+    additionalValuesFiles:
+      - values.yaml
+    includeCRDs: true
+
+labels:
+  - pairs:
+      environment: prod
+      project: openpanel
+    includeSelectors: false
+
+patches:
+  - path: patches/app-env.yaml

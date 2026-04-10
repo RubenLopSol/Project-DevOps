@@ -1,0 +1,8 @@
+{
+  "extends": "@openpanel/tsconfig/sdk.json",
+  "compilerOptions": {
+    "incremental": false,
+    "outDir": "dist"
+  },
+  "exclude": ["dist"]
+}

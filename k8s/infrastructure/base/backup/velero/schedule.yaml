@@ -1,0 +1,15 @@
+# Full backup - daily at 2 AM
+# Hourly database backup is prod-only — see k8s/infrastructure/overlays/prod/resources/
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: daily-full-backup
+  namespace: velero
+spec:
+  schedule: "0 2 * * *"
+  template:
+    includedNamespaces:
+      - openpanel
+      - observability
+    ttl: 720h0m0s
+    storageLocation: default

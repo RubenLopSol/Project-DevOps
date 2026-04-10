@@ -1,0 +1,363 @@
+# ============================================================
+# OpenPanel — Local Testing Stack (build from source)
+# Requires: Docker Engine 24+, Docker Compose v2.20+
+#
+# Quick start:
+#   cp .env.example .env
+#   docker compose up --build -d
+#
+# First build takes ~10 min (downloads Node, compiles TypeScript).
+# Subsequent builds use Docker layer cache (~1-2 min).
+#
+# Teardown (keeps data volumes):
+#   docker compose down
+# Full teardown (wipes all data):
+#   docker compose down -v
+#
+# Services exposed locally:
+#   http://localhost:3000  — Dashboard
+#   http://localhost:3333  — API
+#   http://localhost:3334  — BullBoard (queue monitoring)
+#   http://localhost:8123  — ClickHouse HTTP (for debugging)
+#   http://localhost:9090  — Prometheus
+#   http://localhost:3001  — Grafana (admin/admin)
+#   http://localhost:3100  — Loki
+# ============================================================
+
+name: openpanel-local
+
+services:
+
+  # ── Infrastructure ──────────────────────────────────────────
+
+  postgres:
+    image: postgres:14-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-openpanel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required — copy .env.example to .env}
+      POSTGRES_DB: ${POSTGRES_DB:-openpanel}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-openpanel}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - openpanel-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: redis:7.2.5-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - openpanel-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.10.2.65
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clickhouse_local}
+      CLICKHOUSE_DB: openpanel
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - clickhouse-logs:/var/log/clickhouse-server
+      - ./openpanel/docker/clickhouse/clickhouse-config.xml:/etc/clickhouse-server/config.d/op-config.xml:ro
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --user default --password ${CLICKHOUSE_PASSWORD:-clickhouse_local} --query 'SELECT 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    ports:
+      - "8123:8123"
+    networks:
+      - openpanel-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Migration (init job) ────────────────────────────────────
+  # Runs once and exits. api/worker start only when this succeeds.
+
+  migrate:
+    build:
+      context: ./openpanel
+      dockerfile: apps/api/Dockerfile
+    image: openpanel-api:local
+    working_dir: /app/packages/db
+    command: ["node_modules/.bin/prisma", "migrate", "deploy"]
+    environment:
+      HOME: /tmp
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DATABASE_URL_DIRECT: ${DATABASE_URL_DIRECT:?DATABASE_URL_DIRECT is required}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - openpanel-net
+
+  # ── Application ─────────────────────────────────────────────
+
+  api:
+    build:
+      context: ./openpanel
+      dockerfile: apps/api/Dockerfile
+    image: openpanel-api:local
+    command: ["node", "dist/index.js"]
+    restart: unless-stopped
+    environment:
+      HOME: /tmp
+      NODE_ENV: production
+      API_PORT: "3000"
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DATABASE_URL_DIRECT: ${DATABASE_URL_DIRECT:?DATABASE_URL_DIRECT is required}
+      CLICKHOUSE_URL: ${CLICKHOUSE_URL:?CLICKHOUSE_URL is required}
+      REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
+      API_SECRET: ${API_SECRET:?API_SECRET is required}
+      COOKIE_SECRET: ${COOKIE_SECRET:?COOKIE_SECRET is required}
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-true}
+      ALLOW_INVITATION: ${ALLOW_INVITATION:-true}
+      BATCH_SIZE: ${BATCH_SIZE:-5000}
+      BATCH_INTERVAL: ${BATCH_INTERVAL:-10000}
+      CLICKHOUSE_SETTINGS_REMOVE_CONVERT_ANY_JOIN: "true"
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3333}
+      NEXT_PUBLIC_DASHBOARD_URL: ${NEXT_PUBLIC_DASHBOARD_URL:-http://localhost:3000}
+    ports:
+      - "3333:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/healthcheck || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - openpanel-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  worker:
+    build:
+      context: ./openpanel
+      dockerfile: apps/worker/Dockerfile
+    image: openpanel-worker:local
+    restart: unless-stopped
+    environment:
+      HOME: /tmp
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      CLICKHOUSE_URL: ${CLICKHOUSE_URL:?CLICKHOUSE_URL is required}
+      REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
+      BATCH_SIZE: ${BATCH_SIZE:-5000}
+      BATCH_INTERVAL: ${BATCH_INTERVAL:-10000}
+      CLICKHOUSE_SETTINGS_REMOVE_CONVERT_ANY_JOIN: "true"
+    ports:
+      - "3334:3000"  # BullBoard queue dashboard
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/healthcheck || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - openpanel-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "30m"
+        max-file: "3"
+
+  dashboard:
+    build:
+      context: ./openpanel
+      dockerfile: apps/start/Dockerfile
+    image: openpanel-start:local
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      API_URL: http://api:3000
+      DASHBOARD_URL: ${DASHBOARD_URL:-http://localhost:3000}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3333}
+      NEXT_PUBLIC_DASHBOARD_URL: ${NEXT_PUBLIC_DASHBOARD_URL:-http://localhost:3000}
+      COOKIE_SECRET: ${COOKIE_SECRET:?COOKIE_SECRET is required}
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/api/healthcheck || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - openpanel-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # ── Observability ────────────────────────────────────────────
+
+  prometheus:
+    image: prom/prometheus:v2.54.0
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=3d'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - openpanel-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  loki:
+    image: grafana/loki:3.1.0
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki-config.yaml
+    volumes:
+      - ./docker/loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki-data:/loki
+    ports:
+      - "3100:3100"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3100/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - openpanel-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  promtail:
+    image: grafana/promtail:3.1.0
+    restart: unless-stopped
+    command: -config.file=/etc/promtail/promtail-config.yaml
+    volumes:
+      - ./docker/promtail/promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - promtail-data:/tmp
+    depends_on:
+      loki:
+        condition: service_healthy
+    networks:
+      - openpanel-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana-dashboards:/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+      - loki
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - openpanel-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ── Volumes ────────────────────────────────────────────────────
+
+volumes:
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+  clickhouse-data:
+    driver: local
+  clickhouse-logs:
+    driver: local
+  prometheus-data:
+    driver: local
+  loki-data:
+    driver: local
+  grafana-data:
+    driver: local
+  promtail-data:
+    driver: local
+
+# ── Networks ───────────────────────────────────────────────────
+
+networks:
+  openpanel-net:
+    driver: bridge

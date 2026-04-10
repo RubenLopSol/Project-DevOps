@@ -1,0 +1,36 @@
+# Wave 2 — Velero backup operator alongside observability and MinIO
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: velero
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: openpanel
+  source:
+    repoURL: https://github.com/RubenLopSol/proyecto-final-devops.git
+    targetRevision: master
+    # Set by overlays/*/argocd/patches/app-env.yaml — never hardcoded here
+    path: PLACEHOLDER
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: velero
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      # Velero CRDs (BackupStorageLocation, Schedule) require the Velero operator
+      # to be pre-installed via Helm. SkipDryRunOnMissingResource prevents ArgoCD
+      # from hard-blocking other apps when the CRDs haven't been registered yet.
+      # Once `make velero-install ENV=<env>` has been run, this app will sync cleanly.
+      - SkipDryRunOnMissingResource=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

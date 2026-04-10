@@ -1,0 +1,111 @@
+# Staging path patches — sets the correct overlay path and branch for each Application CR.
+# Applied by overlays/staging/argocd/kustomization.yaml.
+# targetRevision is set here so it can be updated per-branch without touching base files.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sealed-secrets
+  namespace: argocd
+spec:
+  source:
+    targetRevision: test/ci-pipeline-validation
+    path: k8s/infrastructure/overlays/staging/sealed-secrets
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: prometheus
+  namespace: argocd
+spec:
+  source:
+    targetRevision: test/ci-pipeline-validation
+    path: k8s/infrastructure/overlays/staging/observability/kube-prometheus-stack
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki
+  namespace: argocd
+spec:
+  source:
+    targetRevision: test/ci-pipeline-validation
+    path: k8s/infrastructure/overlays/staging/observability/loki
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: promtail
+  namespace: argocd
+spec:
+  source:
+    targetRevision: test/ci-pipeline-validation
+    path: k8s/infrastructure/overlays/staging/observability/promtail
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tempo
+  namespace: argocd
+spec:
+  source:
+    targetRevision: test/ci-pipeline-validation
+    path: k8s/infrastructure/overlays/staging/observability/tempo
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: minio
+  namespace: argocd
+spec:
+  source:
+    targetRevision: test/ci-pipeline-validation
+    path: k8s/infrastructure/overlays/staging/minio
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: velero-operator
+  namespace: argocd
+spec:
+  source:
+    targetRevision: test/ci-pipeline-validation
+    path: k8s/infrastructure/overlays/staging/velero-operator
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: velero
+  namespace: argocd
+spec:
+  source:
+    targetRevision: test/ci-pipeline-validation
+    path: k8s/infrastructure/overlays/staging/velero
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: openpanel
+  namespace: argocd
+spec:
+  source:
+    targetRevision: test/ci-pipeline-validation
+    path: k8s/apps/overlays/staging
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: local-path-provisioner
+  namespace: argocd
+spec:
+  source:
+    targetRevision: test/ci-pipeline-validation
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: namespaces
+  namespace: argocd
+spec:
+  source:
+    targetRevision: test/ci-pipeline-validation

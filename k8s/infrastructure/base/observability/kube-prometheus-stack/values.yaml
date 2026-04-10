@@ -1,0 +1,339 @@
+# =============================================================================
+# kube-prometheus-stack — Helm values
+# Incluye: Prometheus + Grafana + AlertManager + Node Exporter + kube-state-metrics
+# Chart: prometheus-community/kube-prometheus-stack
+# =============================================================================
+
+# ----------------------------------------------------------------------------
+# Prometheus
+# ----------------------------------------------------------------------------
+prometheus:
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - prometheus.local
+  prometheusSpec:
+    retention: 15d
+    # Pin Prometheus to the observability node group.
+    # Node is labelled workload=observability by scripts/setup-minikube.sh.
+    nodeSelector:
+      workload: observability
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+
+    # Scrape configs personalizados para OpenPanel
+    additionalScrapeConfigs:
+      - job_name: "kubernetes-pods"
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: pod
+
+# Reglas de alerta personalizadas
+additionalPrometheusRulesMap:
+  openpanel-alerts:
+    groups:
+      - name: openpanel-alerts
+        rules:
+          - alert: ServiceDown
+            # Matches the ServiceMonitor job name: openpanel/openpanel-api
+            expr: up{job="openpanel-api",namespace="openpanel"} == 0
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "OpenPanel API is down"
+              description: "OpenPanel API has been unreachable for more than 2 minutes."
+
+          - alert: HighErrorRate
+            # http_request_duration_seconds is the metric from prom-client with labels
+            # method, route, status_code. Count 5xx rate vs total.
+            expr: >
+              sum(rate(http_request_duration_seconds_count{status_code=~"5..",namespace="openpanel"}[5m])) by (job)
+              /
+              sum(rate(http_request_duration_seconds_count{namespace="openpanel"}[5m])) by (job)
+              > 0.05
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "High error rate on {{ $labels.job }}"
+              description: "HTTP 5xx error rate above 5% for more than 5 minutes."
+
+          - alert: APIHighLatency
+            # P99 latency above 2 seconds for 5 minutes
+            expr: >
+              histogram_quantile(0.99,
+                sum(rate(http_request_duration_seconds_bucket{namespace="openpanel"}[5m])) by (job, le)
+              ) > 2
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High P99 latency on {{ $labels.job }}"
+              description: "P99 request latency is above 2s for more than 5 minutes."
+
+          - alert: NodeJSEventLoopLag
+            # Event loop lag above 500ms means the JS thread is saturated
+            expr: nodejs_eventloop_lag_p99_seconds{namespace="openpanel"} > 0.5
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Node.js event loop lag on {{ $labels.pod }}"
+              description: "P99 event loop lag exceeds 500ms — API may be CPU-starved."
+
+          - alert: HighMemoryUsage
+            expr: >
+              container_memory_usage_bytes{namespace="openpanel"}
+              /
+              container_spec_memory_limit_bytes{namespace="openpanel"}
+              > 0.9
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High memory usage on {{ $labels.pod }}"
+              description: "Memory usage above 90% of the configured limit."
+
+          - alert: DatabaseDown
+            expr: pg_up == 0 or redis_up == 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Database {{ $labels.job }} is down"
+              description: "Database unreachable for more than 1 minute."
+
+# ----------------------------------------------------------------------------
+# Grafana
+# ----------------------------------------------------------------------------
+grafana:
+  enabled: true
+  admin:
+    existingSecret: grafana-admin-credentials
+    userKey: admin-user
+    passwordKey: admin-password
+
+  nodeSelector:
+    workload: observability
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - grafana.local
+
+  # Datasources: Prometheus + Loki + Tempo con correlación
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      access: proxy
+      url: http://loki-gateway.observability.svc.cluster.local
+      editable: false
+      jsonData:
+        derivedFields:
+          - datasourceUid: tempo
+            matcherRegex: "traceID=(\\w+)"
+            name: TraceID
+            url: "$${__value.raw}"
+
+    - name: Tempo
+      type: tempo
+      uid: tempo
+      access: proxy
+      url: http://tempo.observability.svc.cluster.local:3100
+      editable: false
+      jsonData:
+        tracesToLogs:
+          datasourceUid: loki
+          tags: ["job", "namespace", "pod"]
+        serviceMap:
+          datasourceUid: prometheus
+
+  # --------------------------------------------------------------------------
+  # Grafana sidecar — discover dashboard ConfigMaps across all namespaces.
+  # Any ConfigMap labelled `grafana_dashboard: "1"` is auto-loaded.
+  # --------------------------------------------------------------------------
+  sidecar:
+    dashboards:
+      enabled: true
+      searchNamespace: ALL
+      label: grafana_dashboard
+      labelValue: "1"
+      folderAnnotation: grafana_folder
+      provider:
+        foldersFromFilesStructure: true
+
+  # --------------------------------------------------------------------------
+  # Dashboards imported from grafana.com at Grafana startup.
+  # Each entry sets a datasource variable so panels bind to the right source.
+  #
+  # CLUSTER VIEW
+  #   15760 — Kubernetes / Views / Global  (top-level cluster overview)
+  #   1860  — Node Exporter Full           (per-node CPU/mem/disk/network)
+  #   7249  — Kubernetes Cluster           (namespace resource breakdown)
+  #   3119  — Kubernetes cluster monitoring (pod & container drill-down)
+  #
+  # OPENPANEL APPLICATION VIEW
+  #   9628  — PostgreSQL Database          (postgres_exporter metrics)
+  #   11835 — Redis Dashboard              (redis_exporter metrics)
+  #   13502 — ClickHouse Overview          (native ClickHouse metrics)
+  # --------------------------------------------------------------------------
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: cluster
+          orgId: 1
+          folder: "Cluster"
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/cluster
+        - name: openpanel
+          orgId: 1
+          folder: "OpenPanel"
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/openpanel
+
+  dashboards:
+    cluster:
+      kubernetes-global:
+        gnetId: 15760
+        revision: 37
+        datasource:
+          - name: DS_PROMETHEUS
+            value: Prometheus
+      node-exporter-full:
+        gnetId: 1860
+        revision: 37
+        datasource:
+          - name: DS_PROMETHEUS
+            value: Prometheus
+      kubernetes-cluster:
+        gnetId: 7249
+        revision: 1
+        datasource: Prometheus
+      kubernetes-pods:
+        gnetId: 3119
+        revision: 2
+        datasource: Prometheus
+    openpanel:
+      # Node.js API — prom-client standard metrics + HTTP RED metrics
+      # Labels: method, route, status_code on http_request_duration_seconds
+      openpanel-api-nodejs:
+        gnetId: 11159
+        revision: 1
+        datasource: Prometheus
+      postgres:
+        gnetId: 9628
+        revision: 7
+        datasource: Prometheus
+      redis:
+        gnetId: 11835
+        revision: 1
+        datasource: Prometheus
+      # ClickHouse native Prometheus endpoint (:9363) — metrics like
+      # ClickHouseMetrics_*, ClickHouseProfileEvents_*, ClickHouseAsyncMetrics_*
+      clickhouse:
+        gnetId: 14192
+        revision: 3
+        datasource:
+          - name: DS_PROMETHEUS
+            value: Prometheus
+
+# ----------------------------------------------------------------------------
+# AlertManager
+# ----------------------------------------------------------------------------
+alertmanager:
+  enabled: true
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - alertmanager.local
+  alertmanagerSpec:
+    nodeSelector:
+      workload: observability
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      group_by: ['alertname', 'namespace', 'severity']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      receiver: 'null'
+      routes:
+        - matchers:
+            - severity = critical
+          receiver: 'null'
+          continue: false
+    inhibit_rules:
+      - source_matchers:
+          - severity = critical
+        target_matchers:
+          - severity = warning
+        equal: ['alertname', 'namespace']
+    receivers:
+      # 'null' receiver: alerts are evaluated and routed but not forwarded.
+      # Replace with a real integration for production:
+      #   slack_configs, email_configs, pagerduty_configs, webhook_configs
+      - name: 'null'
+
+# ----------------------------------------------------------------------------
+# Node Exporter (métricas del nodo)
+# ----------------------------------------------------------------------------
+nodeExporter:
+  enabled: true
+
+# ----------------------------------------------------------------------------
+# kube-state-metrics (métricas de objetos Kubernetes)
+# ----------------------------------------------------------------------------
+kubeStateMetrics:
+  enabled: true
