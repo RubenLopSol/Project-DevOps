@@ -4,6 +4,44 @@ Production-grade DevOps platform built as a Master's final project. Deploys [Ope
 
 ---
 
+## Submodule Setup
+
+The `openpanel/` directory is a **git submodule** pointing to a fork of the OpenPanel source code. It is not committed as files — git only tracks a single pointer (commit SHA) to the external repo.
+
+### After cloning this repo
+
+The `openpanel/` folder will be empty. Run:
+
+```bash
+git submodule update --init
+```
+
+This fetches the pinned commit from the fork and populates `openpanel/`. The contents are **not tracked by this repo** — git ignores everything inside `openpanel/` and only records the pointer. You will not accidentally commit application source files.
+
+To clone and populate in one step:
+
+```bash
+git clone --recurse-submodules git@github.com:RubenLopSol/Project-DevOps.git
+```
+
+### Bumping to a newer openpanel commit
+
+When new changes are pushed to the openpanel fork and you want to pick them up:
+
+```bash
+cd openpanel
+git pull origin main          # fetch latest commit from the fork
+
+cd ..
+git add openpanel             # stages the updated pointer (one line change)
+git commit -m "chore: bump openpanel submodule to latest"
+git push origin master        # triggers Gate 1 → Gate 2 → Gate 3 → deploy
+```
+
+CI/CD handles the submodule automatically — workflows that need the source code (`ci-validate.yml`, `ci-build-publish.yml`) run `git submodule update --init` behind the scenes via `submodules: true` in the checkout step.
+
+---
+
 ## Architecture Overview
 
 ```
