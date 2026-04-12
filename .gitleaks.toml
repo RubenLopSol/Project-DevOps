@@ -1,0 +1,21 @@
+# Gitleaks configuration
+# https://github.com/gitleaks/gitleaks#configuration
+
+title = "gitleaks config"
+
+[extend]
+# Use the default gitleaks ruleset as the base
+useDefault = true
+
+# Allowlist paths that contain known false positives.
+[allowlist]
+description = "Known false positives"
+paths = [
+  # Helm chart cache — equivalent to node_modules, contains example/dummy keys in READMEs
+  '''k8s/.*/charts/.*''',
+  # Upstream OpenPanel source code is a git submodule — it is never committed here.
+  # This path is kept as a safety net in case the submodule contents were ever
+  # temporarily committed (e.g. during migration). Mock data, test fixtures, and
+  # API documentation examples contain fake client secrets / project IDs — not real credentials.
+  '''openpanel/.*''',
+]

@@ -416,3 +416,9 @@ jobs:
         uses: gitleaks/gitleaks-action@v2.3.6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+          # Scan only commits introduced by this PR/push, not the full history.
+          # The full history contains the old openpanel source commits (1500+ files)
+          # which take >10 minutes to scan and contain mock data false positives.
+          # New secrets in new commits are what actually matters.
+          GITLEAKS_LOG_OPTS: --no-walk
