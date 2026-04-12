@@ -214,9 +214,19 @@ services:
       dockerfile: apps/start/Dockerfile
     image: openpanel-start:local
     restart: unless-stopped
+    # host.docker.internal resolves to the host machine from inside this container.
+    # This lets the SSR code reach the API at localhost:3333 on the host.
+    # On the browser side, host.docker.internal must resolve to 127.0.0.1 —
+    # add this line to /etc/hosts on your machine if not already present:
+    #   127.0.0.1  host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       NODE_ENV: production
-      API_URL: http://api:3000
+      # Used by getServerEnvs (server-side + browser).
+      # host.docker.internal:3333 works from both the container (SSR) and the
+      # browser (client-side) once /etc/hosts has: 127.0.0.1 host.docker.internal
+      API_URL: http://host.docker.internal:3333
       DASHBOARD_URL: ${DASHBOARD_URL:-http://localhost:3000}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3333}
       NEXT_PUBLIC_DASHBOARD_URL: ${NEXT_PUBLIC_DASHBOARD_URL:-http://localhost:3000}
