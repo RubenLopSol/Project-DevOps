@@ -7,7 +7,7 @@ import { getServerEnvs } from './server/get-envs';
 
 export const getRouter = async () => {
   const envs = await getServerEnvs();
-  const rqContext = TanstackQuery.getContext(envs.apiUrl);
+  const rqContext = TanstackQuery.getContext(envs.apiUrl, envs.clientApiUrl);
 
   const router = createTanstackRouter({
     routeTree,
@@ -18,7 +18,10 @@ export const getRouter = async () => {
     defaultPreload: 'intent',
     Wrap: (props: { children: React.ReactNode }) => {
       return (
-        <TanstackQuery.Provider {...rqContext} apiUrl={envs.apiUrl}>
+        <TanstackQuery.Provider
+          {...rqContext}
+          apiUrl={envs.clientApiUrl || envs.apiUrl}
+        >
           {props.children}
         </TanstackQuery.Provider>
       );

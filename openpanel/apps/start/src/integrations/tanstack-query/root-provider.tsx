@@ -65,7 +65,7 @@ export function createTRPCClientWithHeaders(apiUrl: string) {
   });
 }
 
-export function getContext(apiUrl: string) {
+export function getContext(serverApiUrl: string, clientApiUrl?: string) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -78,8 +78,15 @@ export function getContext(apiUrl: string) {
     },
   });
 
-  // Create a tRPC client with cookies if provided
-  const client = createTRPCClientWithHeaders(apiUrl);
+  // Server-side: use the internal Docker URL so SSR can reach the API container.
+  // Client-side: use the public URL (localhost:3333) so the browser sends the
+  // session cookie — which is scoped to localhost, not host.docker.internal.
+  const effectiveApiUrl =
+    typeof window === 'undefined'
+      ? serverApiUrl
+      : (clientApiUrl || serverApiUrl);
+
+  const client = createTRPCClientWithHeaders(effectiveApiUrl);
 
   const serverHelpers = createTRPCOptionsProxy({
     client: client,
@@ -98,6 +105,9 @@ export function Provider({
 }: {
   children: React.ReactNode;
   queryClient: QueryClient;
+  // This is the client-side URL (e.g. localhost:3333).
+  // It must be a URL the browser can reach, and should match the domain where
+  // the session cookie will be stored so SSR can forward it correctly.
   apiUrl: string;
 }) {
   const trpcClient = useMemo(

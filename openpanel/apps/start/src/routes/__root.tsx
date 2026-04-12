@@ -31,6 +31,7 @@ interface MyRouterContext {
   queryClient: QueryClient;
   trpc: TRPCOptionsProxy<AppRouter>;
   apiUrl: string;
+  clientApiUrl: string;
   dashboardUrl: string;
   isSelfHosted: boolean;
   isMaintenance: boolean;
