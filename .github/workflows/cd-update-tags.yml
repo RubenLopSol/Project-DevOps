@@ -1,0 +1,124 @@
+name: CD-Update-GitOps-Manifests
+
+# ---------------------------------------------------------------------------
+# WHAT THIS WORKFLOW DOES
+#
+# Gate 3 of the CI/CD chain — the GitOps update step.
+# Triggered automatically when CI-Build-Publish succeeds on master/main.
+#
+# What it does:
+#   1. Updates the image tags in the K8s manifests to the new SHA-based tag
+#   2. Commits those changes back to master
+#   3. Creates a release tag (release/main-<sha>) pointing to that commit
+#
+# ArgoCD's bootstrap app watches master. When it sees the updated
+# openpanel-app.yaml it reconciles the openpanel Application to use the new
+# release tag. ArgoCD then deploys from the release tag which contains the
+# updated image references → zero-touch GitOps deployment.
+#
+# Blue-Green note:
+#   Only api-deployment-BLUE is updated. Green keeps the previous image tag
+#   intentionally — green serves as the instant rollback path. When you run
+#   the blue-green switch, green brings the previous known-good version up.
+#   This is a design trade-off: rollback speed over always-identical images.
+# ---------------------------------------------------------------------------
+
+# Deny all permissions by default; the single job only needs contents: write.
+permissions: read-all
+
+# Serialise CD runs so two concurrent pushes cannot both try to update master
+# simultaneously (git push would reject the second one as non-fast-forward).
+# cancel-in-progress: false — every successful build must get its tag committed.
+concurrency:
+  group: cd-gitops
+  cancel-in-progress: false
+
+on:
+  workflow_run:
+    workflows: ["CI-Build-Publish"]
+    types: [completed]
+    branches: [master, main]
+
+jobs:
+  update-manifests:
+    name: Update Image Tags
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    permissions:
+      contents: write   # needed to commit and push updated manifests + create tags
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # Fetch the full branch so git push doesn't fail if HEAD is behind.
+          ref: master
+
+      - name: Compute short SHA and lowercase owner
+        id: sha
+        run: |
+          echo "short=$(echo '${{ github.event.workflow_run.head_sha }}' | cut -c1-7)" >> $GITHUB_OUTPUT
+          echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      # -----------------------------------------------------------------------
+      # Update image tags in K8s manifests
+      # The sed pattern matches any existing image reference for the service
+      # (whether it currently points to main-<old-sha> or any other tag).
+      # -----------------------------------------------------------------------
+
+      - name: Update API image tag (blue deployment)
+        # Only blue is updated — see Blue-Green note in the workflow header.
+        run: |
+          sed -i "s|image: ghcr.io/.*/openpanel-api:.*|image: ghcr.io/${{ steps.sha.outputs.owner }}/openpanel-api:main-${{ steps.sha.outputs.short }}|g" \
+            k8s/apps/base/openpanel/api-deployment-blue.yaml
+
+      - name: Update Start image tag
+        run: |
+          sed -i "s|image: ghcr.io/.*/openpanel-start:.*|image: ghcr.io/${{ steps.sha.outputs.owner }}/openpanel-start:main-${{ steps.sha.outputs.short }}|g" \
+            k8s/apps/base/openpanel/start-deployment.yaml
+
+      - name: Update Worker image tag
+        run: |
+          sed -i "s|image: ghcr.io/.*/openpanel-worker:.*|image: ghcr.io/${{ steps.sha.outputs.owner }}/openpanel-worker:main-${{ steps.sha.outputs.short }}|g" \
+            k8s/apps/base/openpanel/worker-deployment.yaml
+
+      - name: Update Migrate job image tag
+        # The PreSync migration job uses the same API image.
+        # Keeping it in sync ensures migrations always run with the same code
+        # version as the API that will be deployed after them.
+        run: |
+          sed -i "s|image: ghcr.io/.*/openpanel-api:.*|image: ghcr.io/${{ steps.sha.outputs.owner }}/openpanel-api:main-${{ steps.sha.outputs.short }}|g" \
+            k8s/apps/base/openpanel/migrate-job.yaml
+
+      - name: Pin ArgoCD Application to release tag
+        # Changes openpanel-app.yaml targetRevision from the previous release
+        # tag (or master) to the new release tag. Bootstrap picks this up from
+        # master and updates the Application CR — ArgoCD then syncs from the tag.
+        run: |
+          RELEASE_TAG="release/main-${{ steps.sha.outputs.short }}"
+          sed -i "s|targetRevision:.*|targetRevision: ${RELEASE_TAG}|" \
+            k8s/infrastructure/base/argocd/applications/openpanel-app.yaml
+
+      - name: Commit and push changes
+        run: |
+          RELEASE_TAG="release/main-${{ steps.sha.outputs.short }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add k8s/
+          # --quiet suppresses output when there are no staged changes;
+          # the || true avoids failing the step when there is nothing to commit.
+          git diff --staged --quiet || git commit -m "chore: update image tags to main-${{ steps.sha.outputs.short }} [skip ci]"
+          # Push explicitly to master — avoids failures if HEAD is in a
+          # detached state or if the remote tracking branch was not set up.
+          git push origin HEAD:master
+
+      - name: Create release tag
+        # The tag is created AFTER the manifest-update commit is pushed, so it
+        # points to the commit that already has the correct image references.
+        # ArgoCD syncs from this tag → deterministic, immutable deployments.
+        run: |
+          RELEASE_TAG="release/main-${{ steps.sha.outputs.short }}"
+          git tag "${RELEASE_TAG}"
+          git push origin "${RELEASE_TAG}"
