@@ -1,32 +1,76 @@
 version: 2
 
-# Dependabot automatically checks for new dependency versions and opens a PR
-# for each available update. Just review and merge.
+# Dependabot opens a PR for each available dependency update. Review + merge.
 #
-# Three types of dependencies are covered:
+# Scope (infra repo only — the app fork has its own dependabot.yml):
+#   github-actions — workflows in .github/workflows/*.yml
+#   terraform      — provider pins in terraform/environments/* and modules/*
 #
-#   github-actions — actions used in workflows (actions/checkout, etc.)
-#   npm            — Node.js packages used by the OpenPanel application
-#   docker         — base images in the three Dockerfiles (node:22-alpine, etc.)
-#
-# All are set to check daily.
+# npm + docker are intentionally NOT configured here — the application code,
+# Dockerfiles, and pnpm workspace live in the RubenLopSol/openpanel fork and
+# are updated by that repo's own Dependabot config.
 
 updates:
 
-  # GitHub Actions
-  # Scans all "uses: action@version" lines in the workflows
-  # and proposes updates when a new version is released.
+  # GitHub Actions — scans every "uses: action@version" in workflow files.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "daily"
+      interval: "weekly"
     commit-message:
       prefix: "chore(ci)"
     labels:
       - "dependencies"
       - "ci"
 
-  # NOTE: npm and Docker dependency updates for the OpenPanel application
-  # are intentionally omitted. The openpanel/ directory is a git submodule
-  # (RubenLopSol/openpanel) — Dependabot cannot scan inside submodules.
-  # Dependency updates for the application should be managed in that fork directly.
+  # Terraform providers — one entry per directory that declares providers.
+  # Dependabot reads versions.tf / providers.tf and proposes provider bumps.
+  - package-ecosystem: "terraform"
+    directory: "/terraform/environments/staging"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore(tf-staging)"
+    labels:
+      - "dependencies"
+      - "terraform"
+
+  - package-ecosystem: "terraform"
+    directory: "/terraform/environments/prod"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore(tf-prod)"
+    labels:
+      - "dependencies"
+      - "terraform"
+
+  - package-ecosystem: "terraform"
+    directory: "/terraform/modules/backup-storage"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore(tf-module)"
+    labels:
+      - "dependencies"
+      - "terraform"
+
+  - package-ecosystem: "terraform"
+    directory: "/terraform/modules/iam-irsa"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore(tf-module)"
+    labels:
+      - "dependencies"
+      - "terraform"
+
+  - package-ecosystem: "terraform"
+    directory: "/terraform/modules/iam-user"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore(tf-module)"
+    labels:
+      - "dependencies"
+      - "terraform"
