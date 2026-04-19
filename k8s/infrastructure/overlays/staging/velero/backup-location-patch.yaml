@@ -1,0 +1,20 @@
+# Staging BackupStorageLocation patch
+# Points Velero at the in-cluster MinIO instance (namespace: backup).
+# MinIO is deployed by ArgoCD (wave 2) and provides S3-compatible storage
+# with a 5Gi PVC backed by local-path — fully self-contained, no host dependency.
+#
+# Bucket: velero-backups (created on first deploy via initJob or manually with mc)
+# Credentials: minio / minio123 (staging-only, non-sensitive values)
+apiVersion: velero.io/v1
+kind: BackupStorageLocation
+metadata:
+  name: default
+  namespace: velero
+spec:
+  provider: aws
+  objectStorage:
+    bucket: velero-backups
+  config:
+    region: minio
+    s3ForcePathStyle: "true"
+    s3Url: http://minio.backup.svc.cluster.local:9000

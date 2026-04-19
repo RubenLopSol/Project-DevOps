@@ -1,0 +1,17 @@
+# Override clickhouse StorageClass to local-path for staging.
+# See postgres-storage.yaml for the rationale.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: clickhouse
+  namespace: openpanel
+spec:
+  volumeClaimTemplates:
+    - metadata:
+        name: clickhouse-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 10Gi

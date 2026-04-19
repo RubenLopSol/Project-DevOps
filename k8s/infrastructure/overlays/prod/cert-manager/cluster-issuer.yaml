@@ -1,0 +1,28 @@
+# =============================================================================
+# Prod ClusterIssuer
+#
+# Kept as self-signed for now — swap for a real ACME issuer (Let's Encrypt HTTP-01
+# or DNS-01) once the prod domain is finalized. The Certificate resources in
+# k8s/apps/base/openpanel/ reference the same name so swapping this file is
+# the only change required when moving to a trusted CA.
+#
+# TODO(prod): replace with:
+#   apiVersion: cert-manager.io/v1
+#   kind: ClusterIssuer
+#   metadata: { name: openpanel-selfsigned }   # keep name for no-diff swap
+#   spec:
+#     acme:
+#       server: https://acme-v02.api.letsencrypt.org/directory
+#       email: <ops contact>
+#       privateKeySecretRef: { name: letsencrypt-prod-account-key }
+#       solvers:
+#         - http01: { ingress: { ingressClassName: nginx } }
+# =============================================================================
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: openpanel-selfsigned
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  selfSigned: {}

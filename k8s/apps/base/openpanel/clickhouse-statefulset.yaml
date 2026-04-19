@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: clickhouse
+  namespace: openpanel
+  labels:
+    app: clickhouse
+spec:
+  serviceName: clickhouse
+  replicas: 1
+  selector:
+    matchLabels:
+      app: clickhouse
+  template:
+    metadata:
+      labels:
+        app: clickhouse
+      annotations:
+        # Scraping is handled by the clickhouse ServiceMonitor; annotation disabled to avoid duplicates.
+        prometheus.io/scrape: "false"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        fsGroup: 101
+      nodeSelector:
+        workload: app
+      containers:
+        - name: clickhouse
+          image: clickhouse/clickhouse-server:24.12
+          ports:
+            - containerPort: 8123
+              name: http
+            - containerPort: 9000
+              name: native
+            - containerPort: 9363
+              name: metrics
+          env:
+            - name: CLICKHOUSE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: clickhouse-credentials
+                  key: CLICKHOUSE_USER
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: clickhouse-credentials
+                  key: CLICKHOUSE_PASSWORD
+            - name: CLICKHOUSE_DB
+              value: "openpanel"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 2Gi
+            limits:
+              cpu: "2"
+              memory: 8Gi
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: 8123
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 8123
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            # Root FS is read-only; the two paths ClickHouse writes to outside
+            # the PVC (/var/log/clickhouse-server for logs, /tmp for spills and
+            # sort scratch) are backed by emptyDir below. Data lives on the PVC
+            # at /var/lib/clickhouse and is unaffected.
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: clickhouse-data
+              mountPath: /var/lib/clickhouse
+            - name: clickhouse-logs
+              mountPath: /var/log/clickhouse-server
+            - name: tmp
+              mountPath: /tmp
+            - name: prometheus-config
+              mountPath: /etc/clickhouse-server/config.d/prometheus.xml
+              subPath: prometheus.xml
+      volumes:
+        - name: prometheus-config
+          configMap:
+            name: clickhouse-prometheus-config
+        - name: clickhouse-logs
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: clickhouse-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 10Gi

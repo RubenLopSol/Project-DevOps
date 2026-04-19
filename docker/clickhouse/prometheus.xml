@@ -1,0 +1,15 @@
+<!--
+  Local override: enables ClickHouse's built-in Prometheus metrics endpoint.
+  Mounted into /etc/clickhouse-server/config.d/ so it merges with the fork's
+  base config without modifying the sibling repo. Scraped by prometheus.yml
+  as job `openpanel-clickhouse`.
+-->
+<clickhouse>
+    <prometheus>
+        <endpoint>/metrics</endpoint>
+        <port>9363</port>
+        <metrics>true</metrics>
+        <events>true</events>
+        <asynchronous_metrics>true</asynchronous_metrics>
+    </prometheus>
+</clickhouse>

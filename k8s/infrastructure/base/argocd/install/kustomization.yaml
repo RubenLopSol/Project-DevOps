@@ -1,0 +1,25 @@
+# =============================================================================
+# ArgoCD — base chart definition
+#
+# Chart:   argoproj/argo-cd
+# Version: 7.7.0
+# Repo:    https://argoproj.github.io/argo-helm
+#
+# Standalone deploy (base values only — no env-specific overrides):
+#   kustomize build --enable-helm k8s/infrastructure/base/argocd/install | kubectl apply -f -
+#
+# In practice, deploy via the environment overlay which merges base values
+# with environment-specific overrides:
+#   kustomize build --enable-helm k8s/infrastructure/overlays/staging/argocd
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+helmCharts:
+  - name: argo-cd
+    repo: https://argoproj.github.io/argo-helm
+    version: "7.7.0"
+    releaseName: argocd
+    namespace: argocd
+    valuesFile: values.yaml
+    includeCRDs: true

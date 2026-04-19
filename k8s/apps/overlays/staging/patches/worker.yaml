@@ -1,0 +1,19 @@
+# Strategic merge patch — worker deployment for dev
+# Reduces resource requests for Minikube.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openpanel-worker
+  namespace: openpanel
+spec:
+  template:
+    spec:
+      containers:
+        - name: worker
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi

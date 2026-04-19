@@ -1,0 +1,70 @@
+# =============================================================================
+# cert-manager — Helm values
+#
+# Chart: jetstack/cert-manager  (version: v1.16.2)
+# Docs:  https://cert-manager.io/docs/installation/helm/
+#
+# Rendered via helmChartInflationGenerator — applied through the env overlay:
+#   kustomize build --enable-helm k8s/infrastructure/overlays/staging/cert-manager | kubectl apply -f -
+#   kustomize build --enable-helm k8s/infrastructure/overlays/prod/cert-manager   | kubectl apply -f -
+# =============================================================================
+
+# ---- CRDs ----
+# Install CRDs with the chart so a single sync brings up the controller + types
+# the ClusterIssuer depends on. Without this, the chart expects CRDs to be
+# pre-installed and the issuer/certificate apply would fail the first time.
+crds:
+  enabled: true
+  keep: true
+
+# ---- Replicas ----
+# Single replica for staging. Prod overlay can bump to 2 for HA.
+replicaCount: 1
+
+# ---- Node placement ----
+# Runs alongside other platform controllers on the app node.
+nodeSelector:
+  workload: app
+
+# ---- Resources ----
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+# ---- Webhook + CA injector ----
+# Both subcomponents are required. Keep defaults but pin node placement.
+webhook:
+  replicaCount: 1
+  nodeSelector:
+    workload: app
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+cainjector:
+  replicaCount: 1
+  nodeSelector:
+    workload: app
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 256Mi
+
+# ---- Metrics ----
+# /metrics is on by default. ServiceMonitor off here — enable per-overlay once
+# kube-prometheus-stack is confirmed running.
+prometheus:
+  enabled: true
+  servicemonitor:
+    enabled: false

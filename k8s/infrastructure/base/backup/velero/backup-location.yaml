@@ -1,0 +1,18 @@
+# Base BackupStorageLocation — provider and bucket structure only.
+# Storage target (bucket name, URL, region) is overridden per environment:
+#   staging: terraform/environments/staging → LocalStack S3 at 192.168.49.1:4566
+#   prod:    terraform/environments/prod       → AWS S3 (real)
+#
+# See overlays/staging/velero/backup-location-patch.yaml
+#     overlays/prod/velero/backup-location-patch.yaml
+apiVersion: velero.io/v1
+kind: BackupStorageLocation
+metadata:
+  name: default
+  namespace: velero
+spec:
+  provider: aws
+  objectStorage:
+    bucket: velero-backups        # overridden by environment patch
+  config:
+    region: us-east-1             # overridden by environment patch

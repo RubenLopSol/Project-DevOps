@@ -1,0 +1,17 @@
+# Database backup - hourly (prod-only)
+# Staging uses daily-full-backup only (see base) — hourly is too expensive for Minikube.
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: hourly-database-backup
+  namespace: velero
+spec:
+  schedule: "0 * * * *"
+  template:
+    includedNamespaces:
+      - openpanel
+    labelSelector:
+      matchLabels:
+        backup: database
+    ttl: 24h0m0s
+    storageLocation: default

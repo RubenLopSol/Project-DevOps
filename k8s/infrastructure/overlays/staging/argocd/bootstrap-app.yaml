@@ -1,0 +1,45 @@
+# =============================================================================
+# App of Apps — Bootstrap Application (staging)
+#
+# Applied once manually to register ArgoCD into itself.
+# After this single kubectl apply, ArgoCD watches this overlay and manages
+# all Application CRs (namespaces, sealed-secrets, observability, minio,
+# velero, openpanel) automatically via GitOps.
+#
+# Apply:
+#   kubectl apply -f k8s/infrastructure/overlays/staging/argocd/bootstrap-app.yaml
+# =============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: bootstrap
+  namespace: argocd
+  labels:
+    environment: staging
+    project: openpanel
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/RubenLopSol/Project-DevOps.git
+    targetRevision: main
+    path: k8s/infrastructure/overlays/staging/argocd
+    kustomize: {}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  # ArgoCD strips empty maps (kustomize: {}) from its desired state during normalization,
+  # but the Kubernetes API server preserves them in the live state. This causes a
+  # permanent OutOfSync on Application CRs that have an empty kustomize source config.
+  ignoreDifferences:
+    - group: argoproj.io
+      kind: Application
+      jsonPointers:
+        - /spec/source/kustomize
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false

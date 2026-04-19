@@ -1,0 +1,573 @@
+# ============================================================
+# OpenPanel —
+# Builds app images from the sibling fork at ../openpanel.
+#
+# Requires: Docker Engine 24+, Docker Compose v2.20+
+#
+# Quick start:
+#   make bootstrap        # one-time host setup (.env, /etc/hosts, fork clone)
+#   make dev-up           # build + start everything, wait for API health
+#   make dev-down         # stop containers + wipe data volumes
+#
+# End-to-end walkthrough: docs/testing-local-stack.md
+#
+# Services exposed on the host:
+#   http://localhost:3000  — Dashboard        (Next.js UI)
+#   http://localhost:3333  — API              (Fastify + tRPC)
+#   http://localhost:3334  — Worker queues    (BullBoard — queue inspection UI)
+#   http://localhost:8123  — ClickHouse HTTP  (debugging only)
+#   http://localhost:9090  — Prometheus       (metrics)
+#   http://localhost:9093  — Alertmanager     (alert routing)
+#   http://localhost:8088  — Webhook sink     (echoes alerts for Loki/Grafana)
+#   http://localhost:8089  — cAdvisor UI      (per-container metrics — debug)
+#   http://localhost:3200  — Tempo            (distributed tracing)
+#   http://localhost:3001  — Grafana          (admin / admin)
+#   http://localhost:3100  — Loki
+# ============================================================
+
+name: openpanel
+
+services:
+
+  # ── Infrastructure ──────────────────────────────────────────
+
+  # postgres — identity + metadata (users, orgs, projects, sessions, clients).
+  postgres:
+    image: postgres:14-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-openpanel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required — copy .env.example to .env}
+      POSTGRES_DB: ${POSTGRES_DB:-openpanel}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-openpanel}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - openpanel-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # redis — BullMQ job queues (tracking events, cron, group_events).
+  redis:
+    image: redis:7.2.5-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - openpanel-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # clickhouse — analytics warehouse (events, sessions, profiles + MVs).
+  # Schema is applied by the `migrate-ch` init job before the API starts.
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.10.2.65
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clickhouse_local}
+      CLICKHOUSE_DB: openpanel
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - clickhouse-logs:/var/log/clickhouse-server
+      - ../openpanel/docker/clickhouse/clickhouse-config.xml:/etc/clickhouse-server/config.d/op-config.xml:ro
+      # Local override that enables the built-in Prometheus endpoint on :9363.
+      - ./docker/clickhouse/prometheus.xml:/etc/clickhouse-server/config.d/prometheus.xml:ro
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --user default --password ${CLICKHOUSE_PASSWORD:-clickhouse_local} --query 'SELECT 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    ports:
+      - "8123:8123"
+      - "9363:9363"   # Prometheus metrics endpoint
+    networks:
+      - openpanel-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Migration (init jobs) ───────────────────────────────────
+  # migrate — applies the Prisma schema to Postgres (users, orgs, projects,
+  # sessions, clients). Blocks `migrate-ch` and all app services until exit 0.
+  migrate:
+    build:
+      context: ../openpanel
+      dockerfile: apps/api/Dockerfile
+    image: ghcr.io/rubenlopsol/openpanel-api:latest
+    working_dir: /app/packages/db
+    command: ["node_modules/.bin/prisma", "migrate", "deploy"]
+    environment:
+      HOME: /tmp
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DATABASE_URL_DIRECT: ${DATABASE_URL_DIRECT:?DATABASE_URL_DIRECT is required}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - openpanel-net
+
+  # migrate-ch — applies the analytics schema to ClickHouse (events, sessions,
+  # profiles + materialized views). Blocks `api` until exit 0.
+  migrate-ch:
+    image: ghcr.io/rubenlopsol/openpanel-api:latest
+    working_dir: /app/packages/db
+    command: ["node_modules/.bin/jiti", "./code-migrations/migrate.ts", "--self-hosting"]
+    environment:
+      HOME: /tmp
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DATABASE_URL_DIRECT: ${DATABASE_URL_DIRECT:?DATABASE_URL_DIRECT is required}
+      CLICKHOUSE_URL: ${CLICKHOUSE_URL:?CLICKHOUSE_URL is required}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      clickhouse:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - openpanel-net
+
+  # ── Application ─────────────────────────────────────────────
+
+  # api — Fastify + tRPC. Accepts tracking events on /track, enqueues them to
+  # Redis, and serves auth/admin/reporting APIs for the dashboard.
+  api:
+    build:
+      context: ../openpanel
+      dockerfile: apps/api/Dockerfile
+    image: ghcr.io/rubenlopsol/openpanel-api:latest
+    command: ["node", "dist/index.js"]
+    restart: unless-stopped
+    environment:
+      HOME: /tmp
+      NODE_ENV: production
+      API_PORT: "3000"
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DATABASE_URL_DIRECT: ${DATABASE_URL_DIRECT:?DATABASE_URL_DIRECT is required}
+      CLICKHOUSE_URL: ${CLICKHOUSE_URL:?CLICKHOUSE_URL is required}
+      REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
+      API_SECRET: ${API_SECRET:?API_SECRET is required}
+      COOKIE_SECRET: ${COOKIE_SECRET:?COOKIE_SECRET is required}
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-true}
+      ALLOW_INVITATION: ${ALLOW_INVITATION:-true}
+      BATCH_SIZE: ${BATCH_SIZE:-5000}
+      BATCH_INTERVAL: ${BATCH_INTERVAL:-10000}
+      CLICKHOUSE_SETTINGS_REMOVE_CONVERT_ANY_JOIN: "true"
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3333}
+      NEXT_PUBLIC_DASHBOARD_URL: ${NEXT_PUBLIC_DASHBOARD_URL:-http://localhost:3000}
+    ports:
+      - "3333:3000"
+    depends_on:
+      migrate-ch:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/healthcheck || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - openpanel-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # worker — background job processor. Drains the BullMQ `events` queue and
+  # batch-inserts rows into ClickHouse every BATCH_INTERVAL ms. Also serves
+  # BullBoard on port 3000 (mapped to host 3334) for queue inspection.
+  worker:
+    build:
+      context: ../openpanel
+      dockerfile: apps/worker/Dockerfile
+    image: ghcr.io/rubenlopsol/openpanel-worker:latest
+    restart: unless-stopped
+    environment:
+      HOME: /tmp
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      CLICKHOUSE_URL: ${CLICKHOUSE_URL:?CLICKHOUSE_URL is required}
+      REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
+      BATCH_SIZE: ${BATCH_SIZE:-5000}
+      BATCH_INTERVAL: ${BATCH_INTERVAL:-10000}
+      CLICKHOUSE_SETTINGS_REMOVE_CONVERT_ANY_JOIN: "true"
+    ports:
+      - "3334:3000"  
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/healthcheck || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - openpanel-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "30m"
+        max-file: "3"
+
+  # dashboard — Next.js UI. Uses host.docker.internal so the same API URL
+  # (http://host.docker.internal:3333) works from both the SSR code running
+  # inside the container AND the browser on the host. `make bootstrap` adds
+  # the required `127.0.0.1 host.docker.internal` line to /etc/hosts.
+  dashboard:
+    build:
+      context: ../openpanel
+      dockerfile: apps/start/Dockerfile
+    image: ghcr.io/rubenlopsol/openpanel-start:latest
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      NODE_ENV: production
+      API_URL: http://host.docker.internal:3333
+      DASHBOARD_URL: ${DASHBOARD_URL:-http://localhost:3000}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3333}
+      NEXT_PUBLIC_DASHBOARD_URL: ${NEXT_PUBLIC_DASHBOARD_URL:-http://localhost:3000}
+      COOKIE_SECRET: ${COOKIE_SECRET:?COOKIE_SECRET is required}
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/api/healthcheck || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - openpanel-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # ── Observability ────────────────────────────────────────────
+  # Metrics: Prometheus scrapes /metrics from api, worker, and the DB exporters.
+  # Logs:    Promtail tails container stdout → ships to Loki.
+  # UI:      Grafana reads from both.
+  # tempo — distributed tracing backend.
+
+  # postgres-exporter — translates Postgres stats to Prometheus metrics on :9187.
+  # Picks up connection count, deadlocks, slow queries, replication lag, etc.
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-openpanel}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-openpanel}?sslmode=disable"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - openpanel-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # redis-exporter — translates Redis INFO + BullMQ-relevant stats to Prometheus
+  # metrics on :9121. .
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.62.0
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: "redis://redis:6379"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - openpanel-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # cadvisor — per-container resource metrics (CPU, mem, network, fs) on :8080.
+  # Reads from the Docker daemon + /sys cgroup tree on the host. Maps to the
+  # K8s-side cAdvisor metrics that kube-prometheus-stack scrapes from kubelet.
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - "8089:8080"   # cAdvisor UI — debugging only
+    networks:
+      - openpanel-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # node-exporter — host-level metrics (CPU, mem, disk, network, filesystem) on
+  # :9100. Mounts /proc + /sys read-only so it reports the host OS numbers, not
+  # the container's. Maps to the K8s DaemonSet that kube-prometheus-stack ships.
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    restart: unless-stopped
+    pid: host
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc|rootfs/var/lib/docker/containers|rootfs/var/lib/docker/overlay2|rootfs/run/docker/netns|rootfs/var/lib/docker/aufs)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro,rslave
+    networks:
+      - openpanel-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # prometheus — scrapes /metrics endpoints, retains 3 days of samples.
+  prometheus:
+    image: prom/prometheus:v2.54.0
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=3d'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - openpanel-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # alertmanager — receives fired alerts from Prometheus and routes them to
+  # configured receivers (currently the local webhook-sink). In K8s this role
+  # is played by the kube-prometheus-stack Alertmanager CRD.
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    restart: unless-stopped
+    environment:
+      # Templated into alertmanager.yml at startup (see entrypoint below).
+      # Set in .env — leave blank and Slack notifications silently no-op
+      # while webhook-sink continues to catch every alert for verification.
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-http://webhook-sink:8080/slack-not-configured}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - 'sed "s|__SLACK_WEBHOOK_URL__|$${SLACK_WEBHOOK_URL}|g" /etc/alertmanager/alertmanager.yml > /tmp/alertmanager.yml && exec /bin/alertmanager --config.file=/tmp/alertmanager.yml --storage.path=/alertmanager'
+    volumes:
+      - ./docker/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    ports:
+      - "9093:9093"
+    depends_on:
+      - webhook-sink
+    networks:
+      - openpanel-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # webhook-sink — tiny HTTP echo server. Alertmanager POSTs fired alerts
+  # here; the container prints the full payload to stdout, Promtail ships it
+  # to Loki, and it becomes queryable in Grafana 
+  # receiver; replace with Slack/PagerDuty/Email in production deployments.
+  webhook-sink:
+    image: mendhak/http-https-echo:34
+    restart: unless-stopped
+    environment:
+      HTTP_PORT: "8080"
+    ports:
+      - "8088:8080"
+    networks:
+      - openpanel-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # tempo — distributed tracing backend. Receives OTLP spans from the API
+  # and worker (gRPC :4317 or HTTP :4318), stores them locally, and exposes
+  # a query API on :3200 that Grafana reads via its Tempo datasource.
+  # Completes the 3-pillar observability stack (metrics/logs/traces).
+  tempo:
+    image: grafana/tempo:2.5.0
+    restart: unless-stopped
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    volumes:
+      - ./docker/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    ports:
+      - "3200:3200"   # Tempo query API (Grafana talks to this)
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver
+    networks:
+      - openpanel-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # loki — log aggregator. Receives structured log streams from promtail.
+  loki:
+    image: grafana/loki:3.1.0
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki-config.yaml
+    volumes:
+      - ./docker/loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki-data:/loki
+    ports:
+      - "3100:3100"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3100/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - openpanel-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # promtail — sidecar that discovers containers via the Docker socket and
+  # ships their stdout/stderr to Loki. Filters to this compose project only.
+  promtail:
+    image: grafana/promtail:3.1.0
+    restart: unless-stopped
+    command: -config.file=/etc/promtail/promtail-config.yaml
+    volumes:
+      - ./docker/promtail/promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - promtail-data:/tmp
+    depends_on:
+      loki:
+        condition: service_healthy
+    networks:
+      - openpanel-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # grafana — dashboards + datasource UI. Prometheus, Loki, and Tempo are all
+  # wired in automatically via the provisioning configs under ./docker/grafana.
+  grafana:
+    image: grafana/grafana:11.2.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana-dashboards:/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+      - loki
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - openpanel-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ── Volumes ────────────────────────────────────────────────────
+
+volumes:
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+  clickhouse-data:
+    driver: local
+  clickhouse-logs:
+    driver: local
+  prometheus-data:
+    driver: local
+  loki-data:
+    driver: local
+  grafana-data:
+    driver: local
+  promtail-data:
+    driver: local
+  alertmanager-data:
+    driver: local
+  tempo-data:
+    driver: local
+
+# ── Networks ───────────────────────────────────────────────────
+
+networks:
+  openpanel-net:
+    driver: bridge

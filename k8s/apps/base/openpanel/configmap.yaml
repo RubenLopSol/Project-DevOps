@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openpanel-config
+  namespace: openpanel
+data:
+  NODE_ENV: "production"
+  API_PORT: "3000"
+  NEXT_PUBLIC_API_URL: "http://openpanel-api:3333"
+  NEXT_PUBLIC_DASHBOARD_URL: "http://openpanel.local"
+  # ClickHouse 24.x does not support query_plan_convert_any_join_to_semi_or_anti_join.
+  # This flag tells the API client to skip that setting (supported from ClickHouse 25.x).
+  CLICKHOUSE_SETTINGS_REMOVE_CONVERT_ANY_JOIN: "true"

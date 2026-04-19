@@ -1,0 +1,45 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: openpanel-ingress
+  namespace: openpanel
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    # Force HTTPS — HTTP requests get 308 to the same host/path on :443.
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # HSTS: 1 year, include subdomains. Browser remembers to always use HTTPS.
+    nginx.ingress.kubernetes.io/hsts: "true"
+    nginx.ingress.kubernetes.io/hsts-max-age: "31536000"
+    nginx.ingress.kubernetes.io/hsts-include-subdomains: "true"
+spec:
+  ingressClassName: nginx
+  # TLS secret is provisioned by scripts/generate-tls-secret.sh for staging
+  # (self-signed, both *.local hosts in SAN). Prod would use cert-manager +
+  # a real ClusterIssuer; kept out of the base to avoid a hard dep on it.
+  tls:
+    - hosts:
+        - openpanel.local
+        - api.openpanel.local
+      secretName: openpanel-tls
+  rules:
+    - host: openpanel.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: openpanel-start
+                port:
+                  number: 3000
+    - host: api.openpanel.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: openpanel-api
+                port:
+                  number: 3333

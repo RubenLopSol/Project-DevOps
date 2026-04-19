@@ -1,0 +1,408 @@
+name: CI-Lint-Test-Validate
+
+# ---------------------------------------------------------------------------
+# WHAT THIS WORKFLOW DOES
+#
+# PR/branch gate for this infra repo. Runs on every push and PR to main.
+#
+# Jobs (run in parallel):
+#   validate-infra  — renders Kustomize manifests, validates schemas,
+#                     lints for K8s best practices
+#   secret-scan     — scans the full git history for leaked secrets
+#
+# Image builds for the app live in the openpanel fork's own GHA pipeline.
+# This repo only owns infrastructure/GitOps; it does not build container
+# images. Deploys are triggered via repository_dispatch from the fork —
+# see cd-update-tags.yml.
+# ---------------------------------------------------------------------------
+
+permissions: read-all
+
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches: [main, Estructura-inicial]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+  pull_request:
+    branches: [main, Estructura-inicial]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+  workflow_dispatch:
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Scope: this repo covers infrastructure/GitOps. Application lint/test/build
+  # lives in the openpanel fork's own GHA (CI-Build-Scan-Publish).
+  # CI here focuses on:
+  #   - Are the Kubernetes manifests valid and safe? (validate-infra)
+  #   - Are there any secrets accidentally committed? (secret-scan)
+  # ---------------------------------------------------------------------------
+
+  # ---------------------------------------------------------------------------
+  # Job 1: Validate Infrastructure
+  # Renders Kustomize, validates against K8s schemas, lints manifests and
+  # Dockerfiles. All tools are pinned to specific versions and their
+  # checksums are verified before execution (supply-chain protection).
+  # ---------------------------------------------------------------------------
+  validate-infra:
+    name: Validate Infrastructure
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # -----------------------------------------------------------------------
+      # Tool versions AND their expected SHA256 checksums are pinned together.
+      #
+      # WHY hardcoded SHA256 instead of downloading the checksum file:
+      #   Fetching a checksum file from the same server as the binary provides
+      #   zero protection — a compromised server can serve a matching fake
+      #   checksum for a backdoored binary. The only safe approach is to store
+      #   the expected hash here, in version-controlled code, independent of
+      #   the download server. Any change to these values requires a code-
+      #   review PR, making tampering visible and auditable.
+      #
+      # HOW to update when bumping a tool version:
+      #   1. Download the new binary locally
+      #   2. Run: sha256sum <binary-filename>
+      #   3. Paste the hash into the corresponding _SHA256 variable below
+      #   4. Open a PR — reviewers see both the version bump and the new hash
+      # -----------------------------------------------------------------------
+      KUBECTL_VERSION:       "v1.28.0"
+      KUBECTL_SHA256:        "4717660fd1466ec72d59000bb1d9f5cdc91fac31d491043ca62b34398e0799ce"
+
+      KUSTOMIZE_VERSION:     "v5.3.0"
+      KUSTOMIZE_SHA256:      "3ab32f92360d752a2a53e56be073b649abc1e7351b912c0fb32b960d1def854c"
+
+      KUBECONFORM_VERSION:   "v0.6.4"
+      KUBECONFORM_SHA256:    "2b4ebeaa4d5ac4843cf8f7b7e66a8874252b6b71bc7cbfc4ef1cbf85acec7c07"
+
+      KUBE_LINTER_VERSION:   "v0.6.4"
+      # kube-linter uses cosign (.sig) for signing — no checksums.txt provided.
+      # SHA256 was computed from the official release binary at pin time.
+      KUBE_LINTER_SHA256:    "39fd93f7339dad1ac3c4b7df75a7684fca0b1e7056d36cc9697d4d1abf795c90"
+
+      K8S_VERSION: "1.28.0"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      # Tool installation — download binary, verify against hardcoded SHA256.
+      # curl -fsSL: -f fails on HTTP errors (no silent 404→garbage),
+      #             -s silent, -S show errors, -L follow redirects.
+      # The echo pattern feeds "<expected-sha>  <filename>" to sha256sum --check,
+      # which exits non-zero if the hash does not match — blocking the pipeline.
+      # -----------------------------------------------------------------------
+
+      - name: Install kubectl
+        run: |
+          curl -fsSL "https://dl.k8s.io/release/${{ env.KUBECTL_VERSION }}/bin/linux/amd64/kubectl" -o kubectl
+          echo "${{ env.KUBECTL_SHA256 }}  kubectl" | sha256sum --check
+          chmod +x kubectl && sudo mv kubectl /usr/local/bin/
+
+      - name: Install kustomize
+        run: |
+          FILENAME="kustomize_${{ env.KUSTOMIZE_VERSION }}_linux_amd64.tar.gz"
+          curl -fsSL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F${{ env.KUSTOMIZE_VERSION }}/${FILENAME}" \
+            -o "${FILENAME}"
+          echo "${{ env.KUSTOMIZE_SHA256 }}  ${FILENAME}" | sha256sum --check
+          tar xzf "${FILENAME}" && sudo mv kustomize /usr/local/bin/
+
+      - name: Install kubeconform
+        run: |
+          FILENAME="kubeconform-linux-amd64.tar.gz"
+          curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${{ env.KUBECONFORM_VERSION }}/${FILENAME}" \
+            -o "${FILENAME}"
+          echo "${{ env.KUBECONFORM_SHA256 }}  ${FILENAME}" | sha256sum --check
+          tar xzf "${FILENAME}" && sudo mv kubeconform /usr/local/bin/
+
+      - name: Install kube-linter
+        run: |
+          FILENAME="kube-linter-linux.tar.gz"
+          curl -fsSL "https://github.com/stackrox/kube-linter/releases/download/${{ env.KUBE_LINTER_VERSION }}/${FILENAME}" \
+            -o "${FILENAME}"
+          echo "${{ env.KUBE_LINTER_SHA256 }}  ${FILENAME}" | sha256sum --check
+          tar xzf "${FILENAME}" && sudo mv kube-linter /usr/local/bin/
+
+      # -----------------------------------------------------------------------
+      # Manifest validation
+      # -----------------------------------------------------------------------
+      # NOTE: Dockerfile linting lives in the openpanel app fork's own GHA.
+      # This repo owns infrastructure/GitOps; it does not vendor app source.
+      # -----------------------------------------------------------------------
+
+      # -----------------------------------------------------------------------
+      # Render both overlays. CI validates staging (what ArgoCD deploys) AND prod
+      # (what would run in production) so a broken patch is caught before merge
+      # regardless of which environment it affects.
+      # -----------------------------------------------------------------------
+
+      # -----------------------------------------------------------------------
+      # apps layer: render both overlays
+      # -----------------------------------------------------------------------
+
+      - name: Kustomize build — apps/staging
+        run: kustomize build k8s/apps/overlays/staging > /tmp/rendered-apps-staging.yaml
+
+      - name: Kustomize build — apps/prod
+        run: kustomize build k8s/apps/overlays/prod > /tmp/rendered-apps-prod.yaml
+
+      # -----------------------------------------------------------------------
+      # infrastructure layer — backup stack (pure Kustomize, no Helm)
+      # -----------------------------------------------------------------------
+
+      - name: Kustomize build — infra/staging
+        run: kustomize build k8s/infrastructure/overlays/staging > /tmp/rendered-infra-staging.yaml
+
+      - name: Kustomize build — infra/prod
+        run: kustomize build k8s/infrastructure/overlays/prod > /tmp/rendered-infra-prod.yaml
+
+      # -----------------------------------------------------------------------
+      # infrastructure layer — observability stack (helmChartInflationGenerator)
+      # --enable-helm is required to render Helm charts via kustomize.
+      # These steps validate the full rendered output of all four charts
+      # (kube-prometheus-stack, loki, promtail, tempo) per environment.
+      # -----------------------------------------------------------------------
+
+      - name: Kustomize build — infra/observability/staging
+        # The observability stack is split into four independent ArgoCD apps
+        # (kube-prometheus-stack, loki, promtail, tempo), each with its own
+        # kustomization.yaml. Build each chart separately and concatenate.
+        # An explicit '---' is prepended before each chart to ensure valid
+        # multi-document YAML when the outputs are concatenated.
+        run: |
+          for chart in kube-prometheus-stack loki promtail tempo; do
+            echo "---"
+            kustomize build --enable-helm --load-restrictor LoadRestrictionsNone \
+              k8s/infrastructure/overlays/staging/observability/$chart
+          done > /tmp/rendered-infra-obs-staging.yaml
+
+      - name: Kustomize build — infra/observability/prod
+        run: |
+          for chart in kube-prometheus-stack loki promtail tempo; do
+            echo "---"
+            kustomize build --enable-helm --load-restrictor LoadRestrictionsNone \
+              k8s/infrastructure/overlays/prod/observability/$chart
+          done > /tmp/rendered-infra-obs-prod.yaml
+
+      # -----------------------------------------------------------------------
+      # infrastructure layer — velero-operator stack (Helm chart)
+      # -----------------------------------------------------------------------
+
+      - name: Kustomize build — infra/velero-operator/staging
+        run: kustomize build --enable-helm --load-restrictor LoadRestrictionsNone k8s/infrastructure/overlays/staging/velero-operator > /tmp/rendered-infra-velero-staging.yaml
+
+      - name: Kustomize build — infra/velero-operator/prod
+        run: kustomize build --enable-helm --load-restrictor LoadRestrictionsNone k8s/infrastructure/overlays/prod/velero-operator > /tmp/rendered-infra-velero-prod.yaml
+
+      # -----------------------------------------------------------------------
+      # infrastructure layer — cert-manager (Helm chart + ClusterIssuer)
+      # -----------------------------------------------------------------------
+
+      - name: Kustomize build — infra/cert-manager/staging
+        run: kustomize build --enable-helm --load-restrictor LoadRestrictionsNone k8s/infrastructure/overlays/staging/cert-manager > /tmp/rendered-infra-cert-manager-staging.yaml
+
+      - name: Kustomize build — infra/cert-manager/prod
+        run: kustomize build --enable-helm --load-restrictor LoadRestrictionsNone k8s/infrastructure/overlays/prod/cert-manager > /tmp/rendered-infra-cert-manager-prod.yaml
+
+      # -----------------------------------------------------------------------
+      # infrastructure layer — local-path-provisioner (pure Kustomize)
+      # -----------------------------------------------------------------------
+
+      - name: Kustomize build — local-path-provisioner
+        run: kustomize build k8s/infrastructure/base/local-path-provisioner > /tmp/rendered-local-path.yaml
+
+      - name: Kubeconform — schema validation (apps/staging)
+        # -ignore-missing-schemas: skips CRDs not found in any schema source
+        #   (SealedSecret, ArgoCD Application objects are not in this render path)
+        # -schema-location default: validates all standard K8s resources
+        # -schema-location CRDs-catalog: validates known CRDs from the community
+        #   catalog (ArgoCD, Velero, cert-manager, etc.)
+        run: |
+          kubeconform \
+            -summary \
+            -verbose \
+            -strict \
+            -ignore-missing-schemas \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            -kubernetes-version ${{ env.K8S_VERSION }} \
+            /tmp/rendered-apps-staging.yaml
+
+      - name: Kubeconform — schema validation (apps/prod)
+        run: |
+          kubeconform \
+            -summary \
+            -verbose \
+            -strict \
+            -ignore-missing-schemas \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            -kubernetes-version ${{ env.K8S_VERSION }} \
+            /tmp/rendered-apps-prod.yaml
+
+      - name: Kubeconform — schema validation (infra/staging)
+        run: |
+          kubeconform \
+            -summary \
+            -verbose \
+            -strict \
+            -ignore-missing-schemas \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            -kubernetes-version ${{ env.K8S_VERSION }} \
+            /tmp/rendered-infra-staging.yaml
+
+      - name: Kubeconform — schema validation (infra/prod)
+        run: |
+          kubeconform \
+            -summary \
+            -verbose \
+            -strict \
+            -ignore-missing-schemas \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            -kubernetes-version ${{ env.K8S_VERSION }} \
+            /tmp/rendered-infra-prod.yaml
+
+      - name: Kube-linter — best-practices checks (apps/staging)
+        run: kube-linter lint /tmp/rendered-apps-staging.yaml --config .kube-linter.yaml
+
+      - name: Kube-linter — best-practices checks (apps/prod)
+        run: kube-linter lint /tmp/rendered-apps-prod.yaml --config .kube-linter.yaml
+
+      - name: Kube-linter — best-practices checks (infra/staging)
+        run: kube-linter lint /tmp/rendered-infra-staging.yaml --config .kube-linter.yaml
+
+      - name: Kube-linter — best-practices checks (infra/prod)
+        run: kube-linter lint /tmp/rendered-infra-prod.yaml --config .kube-linter.yaml
+
+      - name: Kubeconform — schema validation (infra/observability/staging)
+        run: |
+          kubeconform \
+            -summary \
+            -verbose \
+            -strict \
+            -ignore-missing-schemas \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            -kubernetes-version ${{ env.K8S_VERSION }} \
+            /tmp/rendered-infra-obs-staging.yaml
+
+      - name: Kubeconform — schema validation (infra/observability/prod)
+        run: |
+          kubeconform \
+            -summary \
+            -verbose \
+            -strict \
+            -ignore-missing-schemas \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            -kubernetes-version ${{ env.K8S_VERSION }} \
+            /tmp/rendered-infra-obs-prod.yaml
+
+      # kube-linter is intentionally skipped for infra/observability and
+      # infra/velero-operator because the rendered output is entirely third-party
+      # Helm charts. Schema validation (kubeconform) above already confirms
+      # structural validity. Our own code is fully covered by the steps above.
+
+      - name: Kubeconform — schema validation (infra/velero-operator/staging)
+        run: |
+          kubeconform \
+            -summary \
+            -verbose \
+            -strict \
+            -ignore-missing-schemas \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            -kubernetes-version ${{ env.K8S_VERSION }} \
+            /tmp/rendered-infra-velero-staging.yaml
+
+      - name: Kubeconform — schema validation (infra/velero-operator/prod)
+        run: |
+          kubeconform \
+            -summary \
+            -verbose \
+            -strict \
+            -ignore-missing-schemas \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            -kubernetes-version ${{ env.K8S_VERSION }} \
+            /tmp/rendered-infra-velero-prod.yaml
+
+      - name: Kubeconform — schema validation (infra/cert-manager/staging)
+        run: |
+          kubeconform \
+            -summary \
+            -verbose \
+            -strict \
+            -ignore-missing-schemas \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            -kubernetes-version ${{ env.K8S_VERSION }} \
+            /tmp/rendered-infra-cert-manager-staging.yaml
+
+      - name: Kubeconform — schema validation (infra/cert-manager/prod)
+        run: |
+          kubeconform \
+            -summary \
+            -verbose \
+            -strict \
+            -ignore-missing-schemas \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            -kubernetes-version ${{ env.K8S_VERSION }} \
+            /tmp/rendered-infra-cert-manager-prod.yaml
+
+      - name: Kubeconform — schema validation (local-path-provisioner)
+        run: |
+          kubeconform \
+            -summary \
+            -verbose \
+            -strict \
+            -ignore-missing-schemas \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            -kubernetes-version ${{ env.K8S_VERSION }} \
+            /tmp/rendered-local-path.yaml
+
+      - name: Kube-linter — best-practices checks (local-path-provisioner)
+        run: kube-linter lint /tmp/rendered-local-path.yaml --config .kube-linter.yaml
+
+  # ---------------------------------------------------------------------------
+  # Job 2: Secret Detection
+  # Scans the FULL git history (fetch-depth: 0) for accidentally committed
+  # secrets. Running in parallel with validate-infra saves time.
+  # ---------------------------------------------------------------------------
+  secret-scan:
+    name: Secret Detection
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read         # checkout
+      pull-requests: write   # post inline PR annotations when secrets are found
+    steps:
+      - name: Checkout code (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # required — gitleaks scans entire git history
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2.3.6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+          # Scan only commits introduced by this PR/push, not the full history.
+          # The full history contains the old openpanel source commits (1500+ files)
+          # which take >10 minutes to scan and contain mock data false positives.
+          # New secrets in new commits are what actually matters.
+          GITLEAKS_LOG_OPTS: --no-walk

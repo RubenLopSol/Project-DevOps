@@ -1,0 +1,52 @@
+# =============================================================================
+# kube-prometheus-stack — PROD overrides
+# Merged on top of k8s/infrastructure/base/observability/kube-prometheus-stack/values.yaml
+# These values increase retention and resources for production workloads.
+# =============================================================================
+
+prometheus:
+  prometheusSpec:
+    # 30-day retention for compliance and incident investigation
+    retention: 30d
+    replicas: 2
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          resources:
+            requests:
+              storage: 50Gi
+
+grafana:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 512Mi
+  ingress:
+    hosts:
+      - grafana.yourdomain.com   # replace with real domain
+    tls:
+      - secretName: grafana-tls
+        hosts:
+          - grafana.yourdomain.com
+
+alertmanager:
+  alertmanagerSpec:
+    replicas: 2
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi

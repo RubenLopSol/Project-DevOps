@@ -1,0 +1,51 @@
+# Strategic merge patch — Ingress for prod
+#
+# Adds TLS to both virtual hosts via cert-manager (ClusterIssuer: letsencrypt-prod).
+# Replaces dev hostnames (*.local) with real production domain names.
+#
+# Prerequisites:
+#   - cert-manager installed in the cluster
+#   - ClusterIssuer named "letsencrypt-prod" configured with your ACME account
+#   - DNS records pointing openpanel.example.com and api.openpanel.example.com
+#     to your cluster's ingress-nginx external IP
+#
+# Update the hostnames below to match your actual domain before deploying.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: openpanel-ingress
+  namespace: openpanel
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - openpanel.example.com
+      secretName: openpanel-tls
+    - hosts:
+        - api.openpanel.example.com
+      secretName: openpanel-api-tls
+  rules:
+    - host: openpanel.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: openpanel-start
+                port:
+                  number: 3000
+    - host: api.openpanel.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: openpanel-api
+                port:
+                  number: 3333

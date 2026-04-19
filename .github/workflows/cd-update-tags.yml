@@ -1,0 +1,141 @@
+name: CD-Update-GitOps-Manifests
+
+# ---------------------------------------------------------------------------
+# WHAT THIS WORKFLOW DOES
+#
+# GitOps update step. Triggered by the openpanel app fork via
+# `repository_dispatch` after it publishes a new image to GHCR.
+#
+# What it does:
+#   1. Updates the image tags in the K8s manifests to the new SHA-based tag
+#   2. Commits those changes back to the tracked branch
+#   3. Creates a release tag (release/main-<sha>) pointing to that commit
+#
+# ArgoCD polls the infra repo on its tracked branch. When it sees the updated
+# image references it reconciles the openpanel Application → rolls out.
+#
+# Blue-Green note:
+#   Only api-deployment-BLUE is updated. Green keeps the previous image tag
+#   intentionally — green serves as the instant rollback path. When you run
+#   the blue-green switch, green brings the previous known-good version up.
+#   This is a design trade-off: rollback speed over always-identical images.
+#
+# Trigger contract (from the fork):
+#   event-type:    app-image-published
+#   client-payload:
+#     sha:         short commit SHA (7 chars) of the app-fork commit that
+#                  produced the image — used as the image tag suffix
+#                  (main-<sha>) and the release-tag suffix
+# ---------------------------------------------------------------------------
+
+# Deny all permissions by default; the single job only needs contents: write.
+permissions: read-all
+
+# Serialise CD runs so two concurrent dispatches cannot both try to push
+# simultaneously (git push would reject the second one as non-fast-forward).
+# cancel-in-progress: false — every dispatched build must get its tag committed.
+concurrency:
+  group: cd-gitops
+  cancel-in-progress: false
+
+on:
+  repository_dispatch:
+    types: [app-image-published]
+  # Manual fallback: run from the Actions tab with a short SHA if the fork
+  # pipeline failed to dispatch for some reason.
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Short commit SHA (7 chars) to pin the image tag to"
+        required: true
+        type: string
+
+# The branch ArgoCD currently tracks. Change to `main` once stabilised.
+env:
+  TRACKED_BRANCH: main
+
+jobs:
+  update-manifests:
+    name: Update Image Tags
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write   # needed to commit and push updated manifests + create tags
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ env.TRACKED_BRANCH }}
+
+      - name: Resolve short SHA + lowercase owner
+        id: ctx
+        run: |
+          # repository_dispatch payload wins; fall back to manual input.
+          SHORT="${{ github.event.client_payload.sha || inputs.sha }}"
+          if [[ -z "${SHORT}" ]]; then
+            echo "::error::No short SHA provided (empty client_payload.sha and inputs.sha)"
+            exit 1
+          fi
+          echo "short=${SHORT}" >> "${GITHUB_OUTPUT}"
+          echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "${GITHUB_OUTPUT}"
+
+      # -----------------------------------------------------------------------
+      # Update image tags in K8s manifests
+      # The sed pattern matches any existing image reference for the service
+      # (whether it currently points to main-<old-sha> or any other tag).
+      # -----------------------------------------------------------------------
+
+      - name: Update API image tag (blue deployment)
+        # Only blue is updated — see Blue-Green note in the workflow header.
+        run: |
+          sed -i "s|image: ghcr.io/.*/openpanel-api:.*|image: ghcr.io/${{ steps.ctx.outputs.owner }}/openpanel-api:main-${{ steps.ctx.outputs.short }}|g" \
+            k8s/apps/base/openpanel/api-deployment-blue.yaml
+
+      - name: Update Start image tag
+        run: |
+          sed -i "s|image: ghcr.io/.*/openpanel-start:.*|image: ghcr.io/${{ steps.ctx.outputs.owner }}/openpanel-start:main-${{ steps.ctx.outputs.short }}|g" \
+            k8s/apps/base/openpanel/start-deployment.yaml
+
+      - name: Update Worker image tag
+        run: |
+          sed -i "s|image: ghcr.io/.*/openpanel-worker:.*|image: ghcr.io/${{ steps.ctx.outputs.owner }}/openpanel-worker:main-${{ steps.ctx.outputs.short }}|g" \
+            k8s/apps/base/openpanel/worker-deployment.yaml
+
+      - name: Update Migrate job image tag
+        # The PreSync migration job uses the same API image.
+        # Keeping it in sync ensures migrations always run with the same code
+        # version as the API that will be deployed after them.
+        run: |
+          sed -i "s|image: ghcr.io/.*/openpanel-api:.*|image: ghcr.io/${{ steps.ctx.outputs.owner }}/openpanel-api:main-${{ steps.ctx.outputs.short }}|g" \
+            k8s/apps/base/openpanel/migrate-job.yaml
+
+      - name: Pin ArgoCD Application to release tag
+        # Changes openpanel-app.yaml targetRevision to the new release tag so
+        # the app Application syncs from an immutable tag rather than a branch.
+        # The *other* Application CRs keep pointing at TRACKED_BRANCH.
+        run: |
+          RELEASE_TAG="release/main-${{ steps.ctx.outputs.short }}"
+          sed -i "s|targetRevision:.*|targetRevision: ${RELEASE_TAG}|" \
+            k8s/infrastructure/base/argocd/applications/openpanel-app.yaml
+
+      - name: Commit and push changes
+        run: |
+          SHORT="${{ steps.ctx.outputs.short }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add k8s/
+          # --quiet suppresses output when there are no staged changes;
+          # the || true avoids failing the step when there is nothing to commit.
+          git diff --staged --quiet || git commit -m "chore: update image tags to main-${SHORT} [skip ci]"
+          git push origin HEAD:${{ env.TRACKED_BRANCH }}
+
+      - name: Create release tag
+        # The tag is created AFTER the manifest-update commit is pushed, so it
+        # points to the commit that already has the correct image references.
+        # ArgoCD syncs from this tag → deterministic, immutable deployments.
+        run: |
+          RELEASE_TAG="release/main-${{ steps.ctx.outputs.short }}"
+          git tag "${RELEASE_TAG}"
+          git push origin "${RELEASE_TAG}"

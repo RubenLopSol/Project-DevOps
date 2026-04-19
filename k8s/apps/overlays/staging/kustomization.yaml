@@ -1,0 +1,36 @@
+# ---------------------------------------------------------------------------
+# STAGING overlay — Minikube / local development
+#
+# Inherits everything from base and applies patches:
+#   - api-blue.yaml         : scale blue API to 1 replica, reduce resource requests
+#   - start.yaml            : reduce dashboard resource requests
+#   - worker.yaml           : reduce worker resource requests
+#   - postgres-storage.yaml : use local-path StorageClass (PV on correct nodeSelector node)
+#   - clickhouse-storage.yaml: same for ClickHouse
+#
+# local-path-provisioner (rancher.io/local-path) creates PV directories on the
+# node where the pod is scheduled — required for nodeSelector to work correctly
+# with the minikube multi-node setup (where the default hostpath provisioner
+# creates all directories on the primary node regardless of scheduling).
+# ---------------------------------------------------------------------------
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base/openpanel
+
+commonAnnotations:
+  environment: staging
+  managed-by: kustomize
+
+labels:
+  - pairs:
+      env: staging
+    includeSelectors: false
+
+patches:
+  - path: patches/api-blue.yaml
+  - path: patches/start.yaml
+  - path: patches/worker.yaml
+  - path: patches/postgres-storage.yaml
+  - path: patches/clickhouse-storage.yaml

@@ -1,0 +1,34 @@
+# Wave 0 — must be installed before any StatefulSet that uses local-path StorageClass.
+# The local-path provisioner creates PV directories on the node where each pod is
+# scheduled, enabling nodeSelectors to work correctly in minikube multi-node setups.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: local-path-provisioner
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/RubenLopSol/Project-DevOps.git
+    targetRevision: main
+    # Same path for all environments — the provisioner is cluster-wide infrastructure
+    path: k8s/infrastructure/base/local-path-provisioner
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: local-path-storage
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

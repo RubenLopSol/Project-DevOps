@@ -1,0 +1,36 @@
+# Wave 1 — Velero operator must be installed before the velero CRD-instances app
+# (wave 2) that creates BackupStorageLocation and Schedule resources.
+# The operator registers the CRDs; the wave ordering ensures CRDs exist before
+# dependent resources are applied.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: velero-operator
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: openpanel
+  source:
+    repoURL: https://github.com/RubenLopSol/Project-DevOps.git
+    targetRevision: main
+    # Set by overlays/*/argocd/patches/app-env.yaml — never hardcoded here
+    path: PLACEHOLDER
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: velero
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

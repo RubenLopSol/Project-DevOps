@@ -1,0 +1,5 @@
+# =============================================================================
+# Promtail — PROD overrides
+# Merged on top of k8s/infrastructure/base/observability/promtail/values.yaml
+# No prod-specific overrides needed — base values fit all environments.
+# =============================================================================

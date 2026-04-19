@@ -1,0 +1,22 @@
+# =============================================================================
+# Promtail — PROD overlay
+#
+# No prod-specific overrides — values.yaml is intentionally empty.
+# Structure mirrors other charts for consistency.
+#
+# Standalone build:
+#   kustomize build --enable-helm k8s/infrastructure/overlays/prod/observability/promtail
+# =============================================================================
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+helmCharts:
+  - name: promtail
+    repo: https://grafana.github.io/helm-charts
+    version: "6.16.4"
+    releaseName: promtail
+    namespace: observability
+    valuesFile: ../../../../base/observability/promtail/values.yaml
+    additionalValuesFiles:
+      - values.yaml

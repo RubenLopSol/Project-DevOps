@@ -1,0 +1,18 @@
+# =============================================================================
+# STAGING overlay — Velero
+#
+# Overrides BackupStorageLocation to point to LocalStack S3, which is
+# provisioned by terraform/environments/staging (IAM user + bucket).
+# Hourly backup schedule is prod-only — too resource-intensive for Minikube.
+#
+# Standalone build:
+#   kustomize build k8s/infrastructure/overlays/staging/velero
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../../base/backup/velero
+
+patches:
+  - path: backup-location-patch.yaml

@@ -1,0 +1,54 @@
+# =============================================================================
+# Velero — Helm values (base, environment-agnostic)
+# Chart: vmware-tanzu/velero
+#
+# Installs the Velero operator (controller + node-agent) and its CRDs.
+# Environment-specific configuration (backend, credentials, bucket) is in
+# the staging/prod overlay values files.
+# =============================================================================
+
+# AWS plugin — required for both LocalStack (staging) and real S3 (prod).
+initContainers:
+  - name: velero-plugin-for-aws
+    image: velero/velero-plugin-for-aws:v1.9.0
+    imagePullPolicy: IfNotPresent
+    volumeMounts:
+      - mountPath: /target
+        name: plugins
+
+# Deploy node-agent (formerly restic) as a DaemonSet for file-system backups.
+# Required to back up volumes not managed by a cloud snapshot provider.
+deployNodeAgent: true
+
+# Volume snapshots are not used — all backups go to object storage via restic/kopia.
+snapshotsEnabled: false
+
+# Disable the upgrade-crds pre-sync Job. It uses bitnami/kubectl:1.28 which is not
+# available on Docker Hub. CRDs are included via kustomize includeCRDs: true instead.
+upgradeCRDs: false
+
+# Prevent the Helm chart from creating a default BackupStorageLocation.
+# The BSL is managed declaratively by the 'velero' ArgoCD app so that
+# environment-specific config (bucket, endpoint) stays in the overlay.
+# Having both create the same resource causes ArgoCD SharedResourceWarning.
+configuration:
+  backupStorageLocation: []
+  volumeSnapshotLocation: []
+
+# Resource limits — sized for a minikube node; prod overlay increases these.
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+nodeAgent:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi

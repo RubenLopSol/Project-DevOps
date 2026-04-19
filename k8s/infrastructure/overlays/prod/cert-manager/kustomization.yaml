@@ -1,0 +1,27 @@
+# =============================================================================
+# cert-manager — PROD overlay
+#
+# Renders the cert-manager chart with prod values (overridable via a prod-only
+# values.yaml if bumping replicas for HA) and applies the ClusterIssuer.
+# =============================================================================
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+helmCharts:
+  - name: cert-manager
+    repo: https://charts.jetstack.io
+    version: "v1.16.2"
+    releaseName: cert-manager
+    namespace: cert-manager
+    valuesFile: ../../../base/cert-manager/values.yaml
+    includeCRDs: true
+
+resources:
+  - cluster-issuer.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/name: cert-manager
+      environment: prod
+    includeSelectors: false

@@ -1,0 +1,38 @@
+# =============================================================================
+# Velero — STAGING overrides
+# Backend: in-cluster MinIO (namespace: backup, port 9000)
+#
+# MinIO is deployed by ArgoCD and provides S3-compatible storage backed by
+# a 5Gi PVC. Fully self-contained — no host-side process required.
+# Credentials match the minio-credentials SealedSecret (staging values).
+# =============================================================================
+
+# MinIO credentials (staging-only, non-sensitive defaults from SealedSecret)
+credentials:
+  secretContents:
+    cloud: |
+      [default]
+      aws_access_key_id=minio
+      aws_secret_access_key=minio123
+
+# BackupStorageLocation is managed declaratively by the 'velero' ArgoCD app
+# (k8s/infrastructure/overlays/staging/velero). Do not configure it here to
+# avoid SharedResourceWarning from two apps owning the same resource.
+
+# Smaller resources for Minikube
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+nodeAgent:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi

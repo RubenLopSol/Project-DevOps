@@ -1,0 +1,16 @@
+# =============================================================================
+# PROD overlay — MinIO
+#
+# Increases MinIO PVC from 10Gi (base) to 50Gi for production backup volumes.
+#
+# Standalone build:
+#   kustomize build k8s/infrastructure/overlays/prod/minio
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../../base/backup/minio
+
+patches:
+  - path: pvc.yaml

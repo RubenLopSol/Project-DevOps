@@ -1,0 +1,160 @@
+# Same alert rules as K8s (k8s/infrastructure/base/observability/kube-prometheus-stack/values.yaml)
+# Adapted for Docker Compose — no namespace labels needed.
+
+groups:
+  - name: openpanel-alerts
+    rules:
+
+      - alert: APIDown
+        expr: up{job="openpanel-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "OpenPanel API is down"
+          description: "The API has not responded for more than 2 minutes. Visitors cannot send tracking events and the dashboard cannot load data."
+
+      - alert: HighErrorRate
+        expr: >
+          sum(rate(http_request_duration_seconds_count{status_code=~"5.."}[5m])) by (job)
+          /
+          sum(rate(http_request_duration_seconds_count[5m])) by (job)
+          > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High 5xx error rate on {{ $labels.job }}"
+          description: "More than 5% of requests to {{ $labels.job }} are failing with server errors. Check recent deployments and the service logs."
+
+      - alert: APIHighLatency
+        expr: histogram_quantile(0.99, rate(http_request_duration_seconds_bucket{job="openpanel-api"}[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "OpenPanel API is slow (P99 > 2s)"
+          description: "The slowest 1% of API requests are taking more than 2 seconds. Users are likely seeing timeouts."
+
+      - alert: NodeJSEventLoopLag
+        expr: nodejs_eventloop_lag_p99_seconds{job="openpanel-api"} > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API event loop lag higher than 500ms"
+          description: "API event loop lag has been higher than 500ms for 5 minutes. The API is too busy to handle incoming requests on time."
+
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes{job=~"openpanel-.+"} > 900e6
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on {{ $labels.job }}"
+          description: "{{ $labels.job }} has been using more than 900 MB of memory for 5 minutes."
+
+      - alert: WorkerDown
+        expr: up{job="openpanel-worker"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "OpenPanel Worker is down"
+          description: "The worker has not responded for more than 2 minutes. Tracking events are piling up in the queue and will not reach ClickHouse until it comes back."
+
+      # ── Datastore availability ──────────────────────────────────
+      - alert: PostgresDown
+        expr: up{job="postgres"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Postgres is unreachable"
+          description: "Postgres has been unreachable for more than 2 minutes. Login, user data, and dashboard reads are failing."
+
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis is unreachable"
+          description: "Redis has been unreachable for more than 2 minutes. Tracking events cannot be queued and the worker has nothing to process."
+
+      - alert: ClickHouseDown
+        expr: up{job="clickhouse"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "ClickHouse is unreachable"
+          description: "ClickHouse has been unreachable for more than 2 minutes. Analytics writes are blocked and the dashboard cannot load reports."
+
+      # ── Datastore saturation ────────────────────────────────────
+      - alert: PostgresTooManyConnections
+        expr: >
+          sum(pg_stat_database_numbackends) by (instance)
+          /
+          on(instance) pg_settings_max_connections
+          > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Postgres connection pool above 80%"
+          description: "Postgres is using more than 80% of its allowed connections. New requests will start being rejected if usage keeps rising."
+
+      - alert: RedisMemoryHigh
+        expr: >
+          redis_memory_max_bytes > 0
+          and
+          (redis_memory_used_bytes / redis_memory_max_bytes) > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis memory usage above 85%"
+          description: "Redis is using more than 85% of the memory it is allowed. It will start rejecting new jobs once full."
+
+      - alert: RedisRejectedConnections
+        expr: rate(redis_rejected_connections_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis rejected connections higher than 0 for 5 minutes"
+          description: "Redis has been rejecting connections for 5 minutes. The API and worker will fail to enqueue or process tracking events."
+
+      - alert: ClickHouseDelayedInserts
+        expr: ClickHouseMetrics_DelayedInserts > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "ClickHouse delayed inserts higher than 0 for 5 minutes"
+          description: "ClickHouse has held back writes for 5 minutes because it cannot keep up. Events will take longer to show up in the dashboard until it catches up."
+
+      # ── Host + container infra (node-exporter + cadvisor) ───────
+      - alert: HostDiskAlmostFull
+        expr: >
+          (1 - node_filesystem_avail_bytes{mountpoint="/",fstype=~"ext4|xfs"}
+              / node_filesystem_size_bytes{mountpoint="/",fstype=~"ext4|xfs"})
+          > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Host disk above 85% full"
+          description: "The host disk is more than 85% full. Free up space before containers start failing — logs, ClickHouse data, and Prometheus history are the usual suspects."
+
+      - alert: ContainerHighCPU
+        expr: >
+          sum by (name) (rate(container_cpu_usage_seconds_total{name=~"openpanel-.+"}[5m]))
+          > 0.9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} CPU higher than 0.9 cores"
+          description: "{{ $labels.name }} has been using more than 0.9 CPU cores for 10 minutes. It may be stuck in a hot loop or overwhelmed by traffic."

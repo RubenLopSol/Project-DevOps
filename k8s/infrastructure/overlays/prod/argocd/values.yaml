@@ -1,0 +1,43 @@
+# ArgoCD prod Helm values — real AWS EKS
+#
+# Merged on top of base/argocd/install/values.yaml by the helmCharts entry
+# in overlays/prod/argocd/kustomization.yaml.
+
+server:
+  # TLS terminated at ingress with cert-manager — ArgoCD runs in insecure mode
+  # behind the Ingress. Set insecure: false if doing end-to-end TLS.
+  insecure: true
+
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hostname: argocd.example.com   # replace with real domain
+    tls: true
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+controller:
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+
+repoServer:
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi

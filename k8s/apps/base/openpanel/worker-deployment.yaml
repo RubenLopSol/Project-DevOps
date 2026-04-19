@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openpanel-worker
+  namespace: openpanel
+  labels:
+    app: openpanel-worker
+  annotations:
+    # Wave 10: run after migrations complete (wave 5) so the DB schema exists.
+    argocd.argoproj.io/sync-wave: "10"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openpanel-worker
+  template:
+    metadata:
+      labels:
+        app: openpanel-worker
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      nodeSelector:
+        workload: app
+      containers:
+        - name: worker
+          image: ghcr.io/rubenlopsol/openpanel-worker:main-aef4b94
+          ports:
+            - containerPort: 3000
+              name: http
+          envFrom:
+            - configMapRef:
+                name: openpanel-config
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: openpanel-secrets
+                  key: DATABASE_URL
+            - name: CLICKHOUSE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: openpanel-secrets
+                  key: CLICKHOUSE_URL
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: openpanel-secrets
+                  key: REDIS_URL
+            - name: DATABASE_URL_DIRECT
+              valueFrom:
+                secretKeyRef:
+                  name: openpanel-secrets
+                  key: DATABASE_URL_DIRECT
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          livenessProbe:
+            httpGet:
+              path: /healthcheck
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthcheck
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL

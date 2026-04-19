@@ -1,0 +1,64 @@
+# =============================================================================
+# kube-prometheus-stack — STAGING overrides
+# Merged on top of k8s/infrastructure/base/observability/kube-prometheus-stack/values.yaml
+# These values shrink resources and retention to fit Minikube.
+# =============================================================================
+
+prometheus:
+  prometheusSpec:
+    # 3-day retention — enough for local development/debugging
+    retention: 3d
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          # local-path creates the PV directory on the node where the pod is scheduled,
+          # ensuring PVs land on the observability node (workload=observability nodeSelector).
+          storageClassName: local-path
+          resources:
+            requests:
+              storage: 5Gi
+
+grafana:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: 20m
+        memory: 32Mi
+      limits:
+        cpu: 50m
+        memory: 64Mi
+
+# ----------------------------------------------------------------------------
+# Minikube-specific: disable scraping of control-plane components that are
+# not accessible from inside the cluster in minikube.
+# These generate false-positive critical alerts (KubeControllerManagerDown,
+# KubeSchedulerDown, etcdMembersDown) which would mask real issues.
+# In prod these must be re-enabled and the components must be reachable.
+# ----------------------------------------------------------------------------
+kubeControllerManager:
+  enabled: false
+
+kubeScheduler:
+  enabled: false
+
+kubeEtcd:
+  enabled: false
+
+kubeProxy:
+  enabled: false

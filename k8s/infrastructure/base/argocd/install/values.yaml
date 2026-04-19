@@ -1,0 +1,72 @@
+# =============================================================================
+# ArgoCD — common Helm values (shared across all environments)
+#
+# Environment-specific overrides live in:
+#   overlays/staging/values.yaml  ← argocd.local, reduced resources
+#   overlays/prod/values.yaml     ← real hostname, TLS, larger resources
+# =============================================================================
+
+configs:
+  params:
+    # Disable TLS between ArgoCD components — TLS is terminated at the Ingress.
+    server.insecure: "true"
+  cm:
+    # Pass --enable-helm to every kustomize build ArgoCD runs.
+    # Required for helmChartInflationGenerator used in observability,
+    # sealed-secrets, and other overlays.
+    kustomize.buildOptions: "--enable-helm --load-restrictor LoadRestrictionsNone"
+
+controller:
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  # Expose Prometheus metrics on :8082/metrics and create a ServiceMonitor
+  # so kube-prometheus-stack scrapes argocd_app_info, argocd_app_sync_total, etc.
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      additionalLabels:
+        release: kube-prometheus-stack
+
+server:
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      additionalLabels:
+        release: kube-prometheus-stack
+
+repoServer:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      additionalLabels:
+        release: kube-prometheus-stack
+
+applicationSet:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      additionalLabels:
+        release: kube-prometheus-stack

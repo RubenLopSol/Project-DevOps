@@ -1,0 +1,27 @@
+# =============================================================================
+# BASE — ArgoCD Application CRs
+#
+# All six Application CRs that ArgoCD manages via the App of Apps pattern.
+# Paths default to staging overlays. The prod overlay patches them to prod
+# via overlays/prod/argocd/patches/app-env.yaml.
+#
+# Consumed by:
+#   overlays/staging/argocd/kustomization.yaml
+#   overlays/prod/argocd/kustomization.yaml
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespaces-app.yaml
+  - local-path-provisioner-app.yaml
+  - sealed-secrets-app.yaml
+  - cert-manager-app.yaml
+  - prometheus-app.yaml
+  - loki-app.yaml
+  - promtail-app.yaml
+  - tempo-app.yaml
+  - minio-app.yaml
+  - velero-operator-app.yaml
+  - velero-app.yaml
+  - openpanel-app.yaml

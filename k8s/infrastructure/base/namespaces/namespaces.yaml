@@ -1,0 +1,59 @@
+# All cluster namespaces are declared here so they are created in a single
+# step before any Helm chart or workload is installed. No chart should use
+# --create-namespace; the namespace must already exist before install.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openpanel
+  labels:
+    app.kubernetes.io/part-of: openpanel
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+  labels:
+    app.kubernetes.io/part-of: observability
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argocd
+  labels:
+    app.kubernetes.io/part-of: argocd
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: backup
+  labels:
+    app.kubernetes.io/part-of: backup
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: velero
+  labels:
+    app.kubernetes.io/part-of: velero
+---
+# sealed-secrets: dedicated namespace for the Sealed Secrets controller.
+# The controller runs here; SealedSecret resources live in their target
+# namespaces (openpanel, observability, backup) — not in this namespace.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sealed-secrets
+  labels:
+    app.kubernetes.io/part-of: sealed-secrets
+---
+# cert-manager: controller + webhook run here. ClusterIssuers are cluster-scoped
+# so they don't need a namespace; Certificate resources live in their consumer
+# namespaces (e.g. openpanel) and cert-manager reconciles the resulting Secrets
+# into those same namespaces.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cert-manager
+  labels:
+    app.kubernetes.io/part-of: cert-manager

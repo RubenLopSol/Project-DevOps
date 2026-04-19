@@ -1,0 +1,22 @@
+# =============================================================================
+# Tempo — STAGING overlay
+#
+# No staging-specific overrides — values.yaml is intentionally empty.
+# Structure mirrors other charts for consistency.
+#
+# Standalone build:
+#   kustomize build --enable-helm k8s/infrastructure/overlays/staging/observability/tempo
+# =============================================================================
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+helmCharts:
+  - name: tempo
+    repo: https://grafana.github.io/helm-charts
+    version: "1.10.3"
+    releaseName: tempo
+    namespace: observability
+    valuesFile: ../../../../base/observability/tempo/values.yaml
+    additionalValuesFiles:
+      - values.yaml
