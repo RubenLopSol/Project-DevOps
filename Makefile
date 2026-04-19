@@ -10,8 +10,6 @@
 # Local development (Docker Compose):
 #   make dev-up                start the full application and monitoring stack
 #   make dev-down              stop all containers and free resources
-#   make dev-logs              follow live logs from all containers
-#   make dev-status            show the health of every running container
 #
 # Infrastructure (Terraform):
 #   make terraform-infra       provision S3, IAM and Secrets Manager
@@ -30,7 +28,6 @@
 SHELL := /bin/bash
 
 # Make sure binaries installed in the user's local bin directory are found.
-# This covers tools like terraform or aws CLI installed without sudo.
 export PATH := $(shell echo $$HOME)/.local/bin:$(PATH)
 
 # Terraform uses the Go runtime which defaults to IPv6 on some systems.
@@ -51,11 +48,8 @@ TF_MIN_MINOR = 5
 
 # =============================================================================
 # Terminal colors
-#
-# Used to make output easier to read at a glance.
-# Each variable is named after its purpose, not the color itself.
 # =============================================================================
-COLOR_BOLD    = \033[1m     # bold text — no color change, just weight
+COLOR_BOLD    = \033[1m     # bold text 
 COLOR_NONE    = \033[0m     # reset — clears all color and formatting
 COLOR_ERROR   = \033[0;31m  # red — errors and destructive actions
 COLOR_SUCCESS = \033[0;32m  # green — success messages and confirmations
@@ -80,7 +74,7 @@ fail    = @echo -e "$(COLOR_ERROR)$(COLOR_BOLD)   ✖  $(1)$(COLOR_NONE)" >&2
 
 # =============================================================================
 
-.PHONY: help dev-up dev-down dev-logs dev-status terraform-infra terraform-status terraform-destroy minikube-up minikube-down
+.PHONY: help bootstrap preflight dev-up dev-down terraform-infra terraform-status terraform-destroy terraform-docs minikube-up minikube-down cluster-up cluster-down
 
 # Show help when running make with no arguments
 .DEFAULT_GOAL := help
@@ -98,10 +92,10 @@ help:
 	@echo -e "$(COLOR_INFO)  ══════════════════════════════════════════════$(COLOR_NONE)"
 	@echo ""
 	@echo -e "  $(COLOR_BOLD)Local development$(COLOR_NONE)"
+	@echo -e "    make bootstrap          One-time host setup (.env, /etc/hosts, sibling fork)"
+	@echo -e "    make preflight          Verify host has every tool and config needed"
 	@echo -e "    make dev-up             Start the full application and monitoring stack"
 	@echo -e "    make dev-down           Stop all containers and free up resources"
-	@echo -e "    make dev-logs           Follow live logs from all running containers"
-	@echo -e "    make dev-status         Show the health of every running container"
 	@echo ""
 	@echo -e "  $(COLOR_BOLD)Infrastructure$(COLOR_NONE)"
 	@echo -e "    make terraform-infra    Provision S3, IAM and Secrets Manager"
@@ -111,6 +105,8 @@ help:
 	@echo -e "  $(COLOR_BOLD)Kubernetes$(COLOR_NONE)"
 	@echo -e "    make minikube-up        Create the 3-node local cluster and configure DNS"
 	@echo -e "    make minikube-down      Delete the cluster and remove /etc/hosts entries"
+	@echo -e "    make cluster-up         Full bring-up: minikube + ArgoCD + App-of-Apps"
+	@echo -e "    make cluster-down       Tear down the full cluster (alias for minikube-down)"
 	@echo ""
 	@echo -e "  $(COLOR_WARNING)Terraform environment options:$(COLOR_NONE)"
 	@echo -e "    ENV=staging  (default) — uses LocalStack running in Docker"
@@ -123,6 +119,68 @@ help:
 
 
 # =============================================================================
+# bootstrap
+#
+# One-time host setup for a fresh checkout. Idempotent — safe to re-run.
+#
+# Handles the three manual prerequisites the preflight check looks for:
+#   1. .env           — copied from .env.example if missing (fill in secrets after)
+#   2. /etc/hosts     — appends host.docker.internal mapping if absent (needs sudo)
+#   3. ../openpanel   — clones the sibling app fork if not already present
+#
+# Preflight stays diagnostic-only on purpose; this target is the "fix it" half.
+# =============================================================================
+bootstrap:
+	$(call header,Bootstrapping host for local development)
+
+	$(call step,Ensuring .env exists)
+	@if [[ -f .env ]]; then \
+		echo -e "   $(COLOR_SUCCESS)✔  .env already present$(COLOR_NONE)"; \
+	else \
+		cp .env.example .env; \
+		echo -e "   $(COLOR_SUCCESS)✔  created .env from .env.example$(COLOR_NONE)"; \
+		echo -e "   $(COLOR_WARNING)   ⚠  open .env and fill in any secrets before 'make dev-up'$(COLOR_NONE)"; \
+	fi
+
+	$(call step,Ensuring host.docker.internal is mapped in /etc/hosts)
+	@if grep -qE '^[^#]*\bhost\.docker\.internal\b' /etc/hosts; then \
+		echo -e "   $(COLOR_SUCCESS)✔  host.docker.internal already mapped$(COLOR_NONE)"; \
+	else \
+		echo -e "   $(COLOR_WARNING)   sudo required to append to /etc/hosts$(COLOR_NONE)"; \
+		echo '127.0.0.1 host.docker.internal' | sudo tee -a /etc/hosts > /dev/null; \
+		echo -e "   $(COLOR_SUCCESS)✔  added 127.0.0.1 host.docker.internal$(COLOR_NONE)"; \
+	fi
+
+	$(call step,Ensuring sibling openpanel fork exists at ../openpanel)
+	@if [[ -d ../openpanel ]]; then \
+		echo -e "   $(COLOR_SUCCESS)✔  ../openpanel already cloned$(COLOR_NONE)"; \
+	else \
+		cd .. && git clone https://github.com/RubenLopSol/openpanel.git; \
+		echo -e "   $(COLOR_SUCCESS)✔  cloned fork into ../openpanel$(COLOR_NONE)"; \
+	fi
+
+	$(call success,Bootstrap complete. Next: 'make dev-up'.)
+
+
+# =============================================================================
+# preflight
+#
+# Runs every tool-and-config check needed by the local stack BEFORE we try to
+# build or start containers.
+#
+# Checks performed (see scripts/preflight.sh for the full list):
+#   1. Docker daemon reachable
+#   2. Docker engine >= 24
+#   3. Docker Compose v2.20+
+#   4. .env file present
+#   5. /etc/hosts has host.docker.internal (needed for dashboard auth cookies)
+#   6. jq installed
+# =============================================================================
+preflight:
+	@bash $(CURDIR)/scripts/preflight.sh
+
+
+# =============================================================================
 # dev-up
 #
 # Starts the full local stack defined in docker-compose.yml — this includes
@@ -130,38 +188,21 @@ help:
 # (PostgreSQL, Redis, ClickHouse) plus the complete monitoring stack
 # (Prometheus, Loki, Promtail, Grafana).
 #
-# On first run, Docker builds images from source which takes ~10 minutes.
-# Subsequent runs reuse the build cache and start in ~1-2 minutes.
-#
-# Before running:
-#   cp .env.example .env    — create your local environment file
 #
 # Services available after startup:
 #   http://localhost:3000   Dashboard
 #   http://localhost:3333   API
-#   http://localhost:3334   BullBoard (queue monitor)
-#   http://localhost:9090   Prometheus
-#   http://localhost:3001   Grafana  (admin / admin)
+#   http://localhost:3334   Worker queues (served by the worker container)
+#   http://localhost:9090   Prometheus       (metrics + rule state)
+#   http://localhost:9093   Alertmanager     (active alerts, silences)
+#   http://localhost:8088   Webhook sink     (echoes alerts for Loki)
+#   http://localhost:8089   cAdvisor UI      (per-container metrics — debug)
+#   http://localhost:3200   Tempo            (distributed tracing query API)
+#   http://localhost:3001   Grafana          (admin / admin)
 #   http://localhost:3100   Loki
 # =============================================================================
-dev-up:
+dev-up: preflight
 	$(call header,Starting local development stack)
-
-	$(call step,Checking that Docker is running)
-	@if ! docker info &>/dev/null; then \
-		$(call fail,Docker is not running — please start Docker and try again); \
-		exit 1; \
-	fi
-	@echo -e "   $(COLOR_SUCCESS)✔  Docker is running$(COLOR_NONE)"
-
-	$(call step,Checking that .env file exists)
-	@if [ ! -f ".env" ]; then \
-		$(call fail,.env file not found); \
-		echo -e "     Copy the example file and fill in your values:" >&2; \
-		echo -e "     cp .env.example .env" >&2; \
-		exit 1; \
-	fi
-	@echo -e "   $(COLOR_SUCCESS)✔  .env file found$(COLOR_NONE)"
 
 	$(call step,Building images and starting all containers)
 	@echo ""
@@ -178,13 +219,17 @@ dev-up:
 		sleep 5; \
 	done
 
-	$(call success,Stack is up. Run 'make dev-status' to see all services.)
-	@echo -e "   $(COLOR_INFO)Dashboard   →  http://localhost:3000$(COLOR_NONE)"
-	@echo -e "   $(COLOR_INFO)API         →  http://localhost:3333$(COLOR_NONE)"
-	@echo -e "   $(COLOR_INFO)BullBoard   →  http://localhost:3334$(COLOR_NONE)"
-	@echo -e "   $(COLOR_INFO)Prometheus  →  http://localhost:9090$(COLOR_NONE)"
-	@echo -e "   $(COLOR_INFO)Grafana     →  http://localhost:3001  (admin / admin)$(COLOR_NONE)"
-	@echo -e "   $(COLOR_INFO)Loki        →  http://localhost:3100$(COLOR_NONE)"
+	$(call success,Stack is up.)
+	@echo -e "   $(COLOR_INFO)Dashboard      →  http://localhost:3000$(COLOR_NONE)"
+	@echo -e "   $(COLOR_INFO)API            →  http://localhost:3333$(COLOR_NONE)"
+	@echo -e "   $(COLOR_INFO)Worker queues  →  http://localhost:3334$(COLOR_NONE)"
+	@echo -e "   $(COLOR_INFO)Prometheus     →  http://localhost:9090$(COLOR_NONE)"
+	@echo -e "   $(COLOR_INFO)Alertmanager   →  http://localhost:9093$(COLOR_NONE)"
+	@echo -e "   $(COLOR_INFO)Webhook sink   →  http://localhost:8088$(COLOR_NONE)"
+	@echo -e "   $(COLOR_INFO)cAdvisor UI    →  http://localhost:8089$(COLOR_NONE)"
+	@echo -e "   $(COLOR_INFO)Tempo          →  http://localhost:3200$(COLOR_NONE)"
+	@echo -e "   $(COLOR_INFO)Grafana        →  http://localhost:3001  (admin / admin)$(COLOR_NONE)"
+	@echo -e "   $(COLOR_INFO)Loki           →  http://localhost:3100$(COLOR_NONE)"
 	@echo ""
 
 
@@ -252,8 +297,13 @@ terraform-infra:
 		if curl -sf http://localhost:4566/_localstack/health &>/dev/null; then \
 			echo -e "   $(COLOR_SUCCESS)✔  LocalStack is already running at localhost:4566$(COLOR_NONE)"; \
 		else \
-			echo -e "   Starting LocalStack container..."; \
-			docker run -d --name localstack -p 4566:4566 localstack/localstack:3 > /dev/null; \
+			if docker ps -a --format '{{.Names}}' | grep -q '^localstack$$'; then \
+				echo -e "   Reusing existing 'localstack' container..."; \
+				docker start localstack > /dev/null; \
+			else \
+				echo -e "   Starting LocalStack container..."; \
+				docker run -d --name localstack -p 4566:4566 localstack/localstack:3 > /dev/null; \
+			fi; \
 			echo -e "   Waiting for LocalStack to become healthy..."; \
 			for i in $$(seq 1 15); do \
 				if curl -sf http://localhost:4566/_localstack/health &>/dev/null; then \
@@ -332,6 +382,13 @@ terraform-destroy:
 
 	$(call success,All resources have been destroyed.)
 
+terraform-docs:
+	$(call header,Regenerating terraform-docs for all modules)
+	@for m in backup-storage iam-user iam-irsa; do \
+		terraform-docs --config terraform/.terraform-docs.yml terraform/modules/$$m; \
+	done
+	$(call success,Module READMEs regenerated.)
+
 
 # =============================================================================
 # minikube-up
@@ -361,6 +418,40 @@ minikube-up:
 
 
 # =============================================================================
+# cluster-up
+#
+# One-shot full bring-up: Minikube cluster + ArgoCD + App-of-Apps.
+# Equivalent to running, in order:
+#   make minikube-up
+#   ./scripts/install-argocd.sh $(ENV)       # also applies bootstrap-app.yaml
+#
+# ENV defaults to staging — override with: make cluster-up ENV=prod
+# =============================================================================
+cluster-up:
+	$(call header,Full cluster bring-up — environment: $(ENV))
+
+	$(call step,Step 1/3 · Minikube cluster)
+	@bash scripts/setup-minikube.sh
+
+	$(call step,Step 2/3 · ArgoCD install + bootstrap)
+	@bash scripts/install-argocd.sh $(ENV)
+
+	$(call success,Cluster + ArgoCD up. ArgoCD is now syncing all applications.)
+	@echo ""
+	@echo -e "   Monitor sync progress:  $(COLOR_BOLD)kubectl get applications -n argocd -w$(COLOR_NONE)"
+	@echo -e "   ArgoCD UI:              $(COLOR_BOLD)http://argocd.local$(COLOR_NONE)"
+
+
+# =============================================================================
+# cluster-down
+#
+# Symmetric teardown for cluster-up. Deleting the cluster also removes ArgoCD
+# and every workload it manages, so this is simply an alias for minikube-down.
+# =============================================================================
+cluster-down: minikube-down
+
+
+# =============================================================================
 # minikube-down
 #
 # Stops and permanently deletes the Minikube cluster, then removes the
@@ -376,7 +467,7 @@ minikube-down:
 	minikube delete -p $(PROFILE)
 
 	$(call step,Removing /etc/hosts entries)
-	@sudo sed -i '/openpanel\.local/d' /etc/hosts 2>/dev/null || true
+	@sudo sed -i -E '/\b(openpanel|api\.openpanel|argocd|grafana|prometheus)\.local\b/d' /etc/hosts 2>/dev/null || true
 
 	$(call success,Cluster deleted and DNS entries removed.)
 
