@@ -397,7 +397,7 @@ jobs:
           fetch-depth: 0   # required — gitleaks scans entire git history
 
       - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2.3.6
+        uses: gitleaks/gitleaks-action@v2.3.9
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: .gitleaks.toml
