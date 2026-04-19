@@ -13,8 +13,8 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/RubenLopSol/proyecto-final-devops.git
-    targetRevision: master
+    repoURL: https://github.com/RubenLopSol/Project-DevOps.git
+    targetRevision: main
     # Same path for all environments — the provisioner is cluster-wide infrastructure
     path: k8s/infrastructure/base/local-path-provisioner
   destination:

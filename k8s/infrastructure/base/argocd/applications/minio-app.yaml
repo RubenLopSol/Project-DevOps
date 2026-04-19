@@ -11,8 +11,8 @@ metadata:
 spec:
   project: openpanel
   source:
-    repoURL: https://github.com/RubenLopSol/proyecto-final-devops.git
-    targetRevision: master
+    repoURL: https://github.com/RubenLopSol/Project-DevOps.git
+    targetRevision: main
     # Set by overlays/*/argocd/patches/app-env.yaml — never hardcoded here
     path: PLACEHOLDER
   destination:

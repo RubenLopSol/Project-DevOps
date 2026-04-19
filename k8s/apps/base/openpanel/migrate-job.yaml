@@ -24,8 +24,8 @@ spec:
       restartPolicy: OnFailure
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000
-        fsGroup: 1000
+        runAsUser: 1001
+        fsGroup: 1001
       nodeSelector:
         workload: app
       initContainers:
@@ -43,7 +43,7 @@ spec:
               echo "postgres is ready"
           securityContext:
             runAsNonRoot: true
-            runAsUser: 1000
+            runAsUser: 1001
             allowPrivilegeEscalation: false
             capabilities:
               drop:
@@ -86,6 +86,9 @@ spec:
               memory: 512Mi
           securityContext:
             allowPrivilegeEscalation: false
+            # Prisma's query-engine initialization writes to node_modules/.prisma
+            # at runtime, so the root filesystem stays writable for this one-shot
+            # job. All other containers in this namespace run readOnlyRootFilesystem.
             readOnlyRootFilesystem: false
             capabilities:
               drop:

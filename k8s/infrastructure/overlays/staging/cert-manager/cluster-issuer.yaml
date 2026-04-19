@@ -1,0 +1,24 @@
+# =============================================================================
+# Self-signed ClusterIssuer — staging
+#
+# Issues certificates that are valid (cryptographically correct, SAN-matching)
+# but signed by a cert-manager-generated CA, so browsers will warn. That is
+# acceptable for staging where clients can be told to trust the cert (curl -k
+# or one-off CA import).
+#
+# Prod overlay replaces this with an ACME / real-CA issuer. Every Certificate
+# in the project references the name "openpanel-selfsigned" for staging and
+# the prod overlay patches it to the prod issuer name.
+#
+# Applied after the cert-manager chart (sync-wave "2") because the ClusterIssuer
+# CRD must exist — the chart installs CRDs with its own wave "-1" from the CRD
+# keep=true flag, and the webhook must be ready to admit this resource.
+# =============================================================================
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: openpanel-selfsigned
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  selfSigned: {}

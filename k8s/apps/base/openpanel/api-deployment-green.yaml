@@ -65,6 +65,11 @@ spec:
                 secretKeyRef:
                   name: openpanel-secrets
                   key: API_SECRET
+            - name: DATABASE_URL_DIRECT
+              valueFrom:
+                secretKeyRef:
+                  name: openpanel-secrets
+                  key: DATABASE_URL_DIRECT
           resources:
             requests:
               cpu: 250m
@@ -82,7 +87,7 @@ spec:
             failureThreshold: 5
           readinessProbe:
             httpGet:
-              path: /healthcheck
+              path: /healthz/live
               port: 3000
             initialDelaySeconds: 10
             periodSeconds: 5

@@ -5,6 +5,11 @@ global:
 rule_files:
   - /etc/prometheus/alerts.yml
 
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
 scrape_configs:
   - job_name: 'prometheus'
     static_configs:
@@ -20,4 +25,35 @@ scrape_configs:
   - job_name: 'openpanel-worker'
     static_configs:
       - targets: ['worker:3000']
+    metrics_path: '/metrics'
+
+  # Postgres — scraped via postgres-exporter sidecar (DATA_SOURCE_NAME → :5432)
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    metrics_path: '/metrics'
+
+  # Redis — scraped via redis-exporter sidecar (REDIS_ADDR → :6379)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    metrics_path: '/metrics'
+
+  # ClickHouse — uses the built-in Prometheus endpoint enabled via
+  # docker/clickhouse/prometheus.xml (mounted into config.d/)
+  - job_name: 'clickhouse'
+    static_configs:
+      - targets: ['clickhouse:9363']
+    metrics_path: '/metrics'
+
+  # cAdvisor — per-container resource metrics (CPU, mem, net, fs)
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    metrics_path: '/metrics'
+
+  # node-exporter — host-level metrics (CPU, mem, disk, net, filesystem)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
     metrics_path: '/metrics'

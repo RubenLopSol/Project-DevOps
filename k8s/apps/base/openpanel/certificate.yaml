@@ -1,0 +1,40 @@
+# =============================================================================
+# Certificate — openpanel ingress TLS
+#
+# cert-manager reconciles this into a Secret named "openpanel-tls" in the
+# openpanel namespace. The Ingress (ingress.yaml) references that Secret in
+# its tls: block. Rotation is automatic (cert-manager renews at 2/3 of lifetime).
+#
+# Issuer: "openpanel-selfsigned" — a ClusterIssuer provisioned by the
+# cert-manager overlay. Staging = selfSigned{}; prod swaps it for ACME
+# without changing this file (the ClusterIssuer name is the stable contract).
+# =============================================================================
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: openpanel-tls
+  namespace: openpanel
+  annotations:
+    # Apply before the Ingress (wave 0) so cert-manager has time to reconcile
+    # the Certificate into the openpanel-tls Secret before nginx loads it.
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  secretName: openpanel-tls
+  duration: 2160h       # 90 days
+  renewBefore: 720h     # renew 30 days before expiry
+  commonName: openpanel.local
+  dnsNames:
+    - openpanel.local
+    - api.openpanel.local
+  privateKey:
+    algorithm: RSA
+    size: 2048
+    rotationPolicy: Always
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+  issuerRef:
+    name: openpanel-selfsigned
+    kind: ClusterIssuer
+    group: cert-manager.io

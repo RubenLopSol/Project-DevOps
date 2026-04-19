@@ -20,7 +20,7 @@ output "velero_install_command" {
     velero install \
       --provider aws \
       --plugins velero/velero-plugin-for-aws:v1.8.0 \
-      --bucket <bucket-name> \
+      --bucket ${var.bucket_name} \
       --backup-location-config region=us-east-1,s3Url=http://localhost:4566,s3ForcePathStyle=true \
       --use-volume-snapshots=false \
       --namespace velero \

@@ -4,7 +4,7 @@ module "backup_storage" {
   bucket_name                 = var.bucket_name
   retention_days              = var.retention_days
   sealed_secrets_secret_name  = var.sealed_secrets_secret_name
-  secret_recovery_window_days = 30  # Longer recovery window for production secrets
+  secret_recovery_window_days = 30 # Longer recovery window for production secrets
 
   tags = {
     Project     = "openpanel"

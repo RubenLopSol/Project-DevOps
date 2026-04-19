@@ -27,6 +27,9 @@ spec:
       containers:
         - name: worker
           image: ghcr.io/rubenlopsol/openpanel-worker:main-aef4b94
+          ports:
+            - containerPort: 3000
+              name: http
           envFrom:
             - configMapRef:
                 name: openpanel-config
@@ -59,10 +62,19 @@ spec:
               cpu: "1"
               memory: 2Gi
           livenessProbe:
-            exec:
-              command: ["cat", "/proc/1/cmdline"]
+            httpGet:
+              path: /healthcheck
+              port: 3000
             initialDelaySeconds: 30
             periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthcheck
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
           securityContext:

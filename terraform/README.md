@@ -53,6 +53,46 @@ Same S3 + Secrets Manager resources, but IAM user is replaced by an **IAM Role w
 
 ---
 
+## Role in the project lifecycle
+
+Terraform provisions the **external state** that the Kubernetes cluster depends on but cannot manage itself. Everything inside the cluster (apps, controllers, dashboards, alert rules) is GitOps-managed by ArgoCD. Everything *outside* the cluster that the cluster reaches out to — the backup bucket, the IAM identity Velero uses to write to it, and the off-cluster slot where the Sealed Secrets key is backed up — is Terraform-managed.
+
+### Per-resource purpose
+
+| Resource | Consumer | Purpose |
+|---|---|---|
+| `aws_s3_bucket.velero_backups` | **Velero** (cluster backup controller) | Destination for scheduled cluster backups (manifests + PV snapshots). |
+| `aws_s3_bucket_versioning` | Velero | Versioning protects backups from accidental overwrite/delete — required for point-in-time recovery. |
+| `aws_s3_bucket_server_side_encryption_configuration` | AWS / Velero | AES256 at rest — security baseline. |
+| `aws_s3_bucket_public_access_block` | AWS | Hard-blocks public exposure of the backup bucket. |
+| `aws_s3_bucket_lifecycle_configuration` | AWS | Expires old backups after `retention_days` (30 staging / 90 prod). Skipped on LocalStack. |
+| `aws_secretsmanager_secret.sealed_secrets_key` | **Sealed Secrets controller** (via `make backup-sealing-key` / `restore-sealing-key`) | Off-cluster slot holding the controller's RSA private key. Without this slot, a lost cluster means all `SealedSecret` manifests become un-decryptable forever. |
+| **Staging** `aws_iam_user.velero` + `aws_iam_access_key` | Velero pod (via mounted `credentials-velero` file) | LocalStack has no OIDC provider, so Velero authenticates with a static access key. |
+| **Prod** `aws_iam_role.velero` (IRSA) | Velero pod (via ServiceAccount annotation) | EKS OIDC provider mints short-lived STS tokens — no static credentials anywhere in the cluster or Git. |
+
+### CI/CD lifecycle integration
+
+**Stage ①** — Run `make terraform-infra ENV=<staging|prod>` once when bootstrapping a fresh environment. Outputs (`bucket_name`, IAM access key *or* role ARN, Secrets Manager ARN, `velero_install_command`) are consumed in stage ②.
+
+**Stage ②** — Cluster-side install, still manual, still idempotent:
+- `make backup-sealing-key` reads the Sealed Secrets controller's generated RSA key from the cluster and writes it into the Secrets Manager slot created in ①. On a new cluster, `make restore-sealing-key` pulls it back before any `SealedSecret` is applied — so all secret CRs in Git remain decryptable.
+- `terraform output -raw velero_install_command` prints the exact `velero install` invocation pre-filled with the bucket name + credentials/role from ①.
+
+**Stage ③** — Runtime. ArgoCD reconciles the cluster against Git and deploys the Velero + Sealed Secrets controllers. At that point:
+- Velero writes nightly backups to the S3 bucket using the IAM identity from ①.
+- Sealed Secrets controller decrypts `SealedSecret` CRs using the RSA key that stage ② seeded into the cluster.
+- The S3 bucket also holds the cluster's disaster-recovery state — `velero restore` rebuilds the cluster from it.
+
+**Stage ④** — CI. `terraform validate` and `terraform fmt -check` are planned for Gate 1 of the GitHub Actions pipeline (tracked in Phase 5); they are not wired up yet. Terraform **never runs `apply` in CI** in this project — applying cloud infra from a shared CI runner would require storing long-lived AWS credentials in GitHub and would make it easy to drift state by accident. Apply stays manual, auditable, and gated by human review of the plan.
+
+### What Terraform deliberately does *not* manage
+
+- **Anything inside the cluster** — Deployments, Services, ConfigMaps, CRDs, controllers. ArgoCD owns those.
+- **App container images** — Built and pushed by the `ci-build-publish` workflow, tagged into manifests by `cd-update-tags`.
+- **Cluster creation itself** — Minikube in staging, EKS in prod (EKS provisioning is out of thesis scope — flagged as task `2.9`).
+
+---
+
 ## Local Setup — Staging
 
 ### Prerequisites

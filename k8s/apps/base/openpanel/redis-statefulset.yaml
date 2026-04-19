@@ -1,11 +1,15 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: redis
   namespace: openpanel
   labels:
     app: redis
 spec:
+  # serviceName must match a Service with the same selector. Kept ClusterIP
+  # (not headless) to match the postgres/clickhouse pattern — at replicas=1
+  # consumers reach redis via `redis:6379` and per-pod DNS is unnecessary.
+  serviceName: redis
   replicas: 1
   selector:
     matchLabels:
@@ -45,6 +49,12 @@ spec:
             limits:
               cpu: 100m
               memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
         - name: redis
           image: redis:7-alpine
           command: ["redis-server", "--save", "60", "1", "--requirepass", "$(REDIS_PASSWORD)"]
@@ -78,22 +88,33 @@ spec:
                 - ping
             initialDelaySeconds: 5
             periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            # RDB dumps + AOF land on the PVC at /data. Redis also writes a
+            # tempfile during dump rotation (under /data too, not /tmp). /tmp
+            # is backed by emptyDir in case of Lua script caching or maint
+            # commands that touch it.
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           volumeMounts:
             - name: redis-data
               mountPath: /data
+            - name: tmp
+              mountPath: /tmp
       volumes:
-        - name: redis-data
-          persistentVolumeClaim:
-            claimName: redis-data
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: redis-data
-  namespace: openpanel
-spec:
-  accessModes: ["ReadWriteOnce"]
-  storageClassName: standard
-  resources:
-    requests:
-      storage: 2Gi
+        - name: tmp
+          emptyDir: {}
+  # One PVC per ordinal. StatefulSet creates `redis-data-redis-0` on first sync.
+  # NOTE: converting from the prior Deployment + standalone PVC does NOT migrate
+  # data — the old `redis-data` PVC is orphaned. Fresh clusters are unaffected.
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 2Gi

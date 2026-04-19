@@ -22,8 +22,8 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/RubenLopSol/proyecto-final-devops.git
-    targetRevision: test/ci-pipeline-validation
+    repoURL: https://github.com/RubenLopSol/Project-DevOps.git
+    targetRevision: Estructura-inicial
     path: k8s/infrastructure/overlays/staging/argocd
     kustomize: {}
   destination:

@@ -1,18 +1,21 @@
-# Wave 3 — OpenPanel application, after infrastructure is healthy
+# Wave 4 — OpenPanel application.
+# Deployed AFTER observability (loki/promtail/tempo are wave 3) so scrape
+# targets and log tailing are already running when the app starts — no
+# missing-telemetry gap on first bring-up.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: openpanel
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: "3"
+    argocd.argoproj.io/sync-wave: "4"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: openpanel
   source:
-    repoURL: https://github.com/RubenLopSol/proyecto-final-devops.git
-    targetRevision: master
+    repoURL: https://github.com/RubenLopSol/Project-DevOps.git
+    targetRevision: main
     # Set by overlays/*/argocd/patches/app-env.yaml — never hardcoded here
     path: PLACEHOLDER
   destination:

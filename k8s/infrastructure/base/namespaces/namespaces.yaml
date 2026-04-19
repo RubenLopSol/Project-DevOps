@@ -46,3 +46,14 @@ metadata:
   name: sealed-secrets
   labels:
     app.kubernetes.io/part-of: sealed-secrets
+---
+# cert-manager: controller + webhook run here. ClusterIssuers are cluster-scoped
+# so they don't need a namespace; Certificate resources live in their consumer
+# namespaces (e.g. openpanel) and cert-manager reconciles the resulting Secrets
+# into those same namespaces.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cert-manager
+  labels:
+    app.kubernetes.io/part-of: cert-manager

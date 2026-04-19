@@ -1,0 +1,42 @@
+# Wave 1 — cert-manager controller + CRDs + ClusterIssuer.
+# Must be running before any Certificate resource is reconciled. OpenPanel
+# (wave 4) depends on the openpanel-tls Secret that cert-manager creates
+# from the Certificate in k8s/apps/base/openpanel/certificate.yaml.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: openpanel
+  source:
+    repoURL: https://github.com/RubenLopSol/Project-DevOps.git
+    targetRevision: main
+    # Set by overlays/*/argocd/patches/app-env.yaml — never hardcoded here
+    path: PLACEHOLDER
+    kustomize: {}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      # CRDs are created by the Helm chart in the same sync; ClusterIssuer
+      # references those CRDs. Skip dry-run on first apply so ArgoCD doesn't
+      # fail before the CRD exists, then retries until webhook is ready.
+      - ServerSideApply=true
+      - SkipDryRunOnMissingResource=true
+      - CreateNamespace=false
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

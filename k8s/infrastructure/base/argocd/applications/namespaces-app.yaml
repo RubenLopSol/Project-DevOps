@@ -11,8 +11,8 @@ metadata:
 spec:
   project: openpanel
   source:
-    repoURL: https://github.com/RubenLopSol/proyecto-final-devops.git
-    targetRevision: master
+    repoURL: https://github.com/RubenLopSol/Project-DevOps.git
+    targetRevision: main
     # Same path for all environments — namespaces are cluster-wide, not env-specific
     path: k8s/infrastructure/base/namespaces
   destination:

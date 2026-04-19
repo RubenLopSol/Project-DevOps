@@ -33,11 +33,13 @@ resources:
   - clickhouse-statefulset.yaml
   - clickhouse-service.yaml
   # Redis
-  - redis-deployment.yaml
+  - redis-statefulset.yaml
   - redis-service.yaml
   # Networking
   - ingress.yaml
   - network-policies.yaml
+  # TLS — cert-manager reconciles this Certificate into openpanel-tls Secret
+  - certificate.yaml
   # Observability — ServiceMonitors picked up by Prometheus Operator
   - servicemonitors.yaml
   # Grafana dashboards — sidecar picks up ConfigMaps labelled grafana_dashboard=1

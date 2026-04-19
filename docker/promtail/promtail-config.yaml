@@ -16,7 +16,7 @@ scrape_configs:
         filters:
           # Only collect logs from our compose project
           - name: label
-            values: ["com.docker.compose.project=openpanel-local"]
+            values: ["com.docker.compose.project=openpanel"]
     relabel_configs:
       # Container name as label
       - source_labels: ['__meta_docker_container_name']

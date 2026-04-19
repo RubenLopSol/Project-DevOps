@@ -6,11 +6,13 @@ metadata:
 spec:
   description: OpenPanel DevOps Project
   sourceRepos:
-    - "https://github.com/RubenLopSol/proyecto-final-devops.git"
+    - "https://github.com/RubenLopSol/Project-DevOps.git"
     - "https://prometheus-community.github.io/helm-charts"
     - "https://grafana.github.io/helm-charts"
     - "https://bitnami-labs.github.io/sealed-secrets"
     - "https://argoproj.github.io/argo-helm"
+    - "https://vmware-tanzu.github.io/helm-charts"
+    - "https://charts.jetstack.io"
   destinations:
     - namespace: openpanel
       server: https://kubernetes.default.svc
@@ -21,6 +23,8 @@ spec:
     - namespace: velero
       server: https://kubernetes.default.svc
     - namespace: sealed-secrets
+      server: https://kubernetes.default.svc
+    - namespace: cert-manager
       server: https://kubernetes.default.svc
     - namespace: kube-system
       server: https://kubernetes.default.svc

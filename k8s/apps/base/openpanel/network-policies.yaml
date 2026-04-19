@@ -232,3 +232,41 @@ spec:
         - podSelector:
             matchLabels:
               job-name: openpanel-migrate
+---
+# API + Worker: allow HTTPS egress to the public internet for optional
+# integrations (Slack OAuth callback in api, user-configured webhook targets
+# in worker). GeoIP is bundled at image build time so no egress needed there.
+#
+# Scoped tightly:
+#   - Only port 443 (no SMTP, no arbitrary TCP)
+#   - `except` excludes RFC1918 ranges so this rule cannot be used to reach
+#     other in-cluster pods/services or the kube-api. Pod/Service CIDRs on
+#     minikube live in 10.0.0.0/8; docker bridges in 172.16.0.0/12; minikube
+#     host network in 192.168.0.0/16.
+#
+# Remove this policy if the deployment has no external integrations — the
+# default-deny will then reassert for these pods.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-integrations-egress
+  namespace: openpanel
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: [openpanel-api, openpanel-worker]
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443

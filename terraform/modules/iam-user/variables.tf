@@ -3,6 +3,11 @@ variable "bucket_arn" {
   type        = string
 }
 
+variable "bucket_name" {
+  description = "Name of the S3 bucket Velero backs up to (used in the install command output)"
+  type        = string
+}
+
 variable "tags" {
   description = "Tags applied to all IAM resources"
   type        = map(string)
