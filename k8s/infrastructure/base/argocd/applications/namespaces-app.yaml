@@ -12,7 +12,7 @@ spec:
   project: openpanel
   source:
     repoURL: https://github.com/RubenLopSol/Project-DevOps.git
-    targetRevision: main
+    targetRevision: Estructura-inicial
     # Same path for all environments — namespaces are cluster-wide, not env-specific
     path: k8s/infrastructure/base/namespaces
   destination:
