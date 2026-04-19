@@ -3,16 +3,17 @@ name: CI-Lint-Test-Validate
 # ---------------------------------------------------------------------------
 # WHAT THIS WORKFLOW DOES
 #
-# Gate 1 of the CI/CD chain. Runs on every push and PR to master.
-# Nothing gets built or deployed unless this passes.
+# PR/branch gate for this infra repo. Runs on every push and PR to main.
 #
 # Jobs (run in parallel):
 #   validate-infra  — renders Kustomize manifests, validates schemas,
-#                     lints for K8s best practices, lints Dockerfiles
+#                     lints for K8s best practices
 #   secret-scan     — scans the full git history for leaked secrets
 #
-# Downstream: on success, triggers CI-Build-Publish (only on pushes to
-# master/main, not on PRs — PRs only validate, never publish images).
+# Image builds for the app live in the openpanel fork's own GHA pipeline.
+# This repo only owns infrastructure/GitOps; it does not build container
+# images. Deploys are triggered via repository_dispatch from the fork —
+# see cd-update-tags.yml.
 # ---------------------------------------------------------------------------
 
 permissions: read-all
@@ -24,13 +25,13 @@ concurrency:
 
 on:
   push:
-    branches: [master, main]
+    branches: [main, Estructura-inicial]
     paths-ignore:
       - '**.md'
       - 'docs/**'
       - '.gitignore'
   pull_request:
-    branches: [master, main]
+    branches: [main, Estructura-inicial]
     paths-ignore:
       - '**.md'
       - 'docs/**'
@@ -39,45 +40,12 @@ on:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # NOTE: lint-and-test is intentionally disabled.
-  #
-  # This is a DevOps-focused project where the primary goal is to build
-  # reliable CI/CD pipelines rather than validate application code, though
-  # CI checks are enforced to ensure developers only ship code that passes
-  # required quality gates.
-  # If this project ever takes ownership of the app code, uncomment the job
-  # below and make sure the upstream code passes biome check first.
-  #
-  # The CI here focuses on what actually matters for DevOps:
+  # Scope: this repo covers infrastructure/GitOps. Application lint/test/build
+  # lives in the openpanel fork's own GHA (CI-Build-Scan-Publish).
+  # CI here focuses on:
   #   - Are the Kubernetes manifests valid and safe? (validate-infra)
   #   - Are there any secrets accidentally committed? (secret-scan)
-  #   - Do the Docker images build and pass security scanning? (ci-build-publish)
   # ---------------------------------------------------------------------------
-  # lint-and-test:
-  #   name: Lint & Test (App)
-  #   runs-on: ubuntu-latest
-  #   defaults:
-  #     run:
-  #       working-directory: ./openpanel
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: actions/setup-node@v4
-  #       with:
-  #         node-version: "22"
-  #     - uses: pnpm/action-setup@v4
-  #       with:
-  #         version: 10
-  #     - id: pnpm-cache
-  #       run: echo "store=$(pnpm store path)" >> $GITHUB_OUTPUT
-  #     - uses: actions/cache@v4
-  #       with:
-  #         path: ${{ steps.pnpm-cache.outputs.store }}
-  #         key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
-  #         restore-keys: ${{ runner.os }}-pnpm-
-  #     - run: pnpm install --frozen-lockfile
-  #     - run: pnpm lint
-  #     - run: pnpm typecheck
-  #     - run: pnpm test
 
   # ---------------------------------------------------------------------------
   # Job 1: Validate Infrastructure
