@@ -9,7 +9,7 @@ metadata:
   namespace: argocd
 spec:
   source:
-    targetRevision: Estructura-inicial
+    targetRevision: main
     path: k8s/infrastructure/overlays/staging/sealed-secrets
 ---
 apiVersion: argoproj.io/v1alpha1
@@ -19,7 +19,7 @@ metadata:
   namespace: argocd
 spec:
   source:
-    targetRevision: Estructura-inicial
+    targetRevision: main
     path: k8s/infrastructure/overlays/staging/cert-manager
 ---
 apiVersion: argoproj.io/v1alpha1
@@ -29,7 +29,7 @@ metadata:
   namespace: argocd
 spec:
   source:
-    targetRevision: Estructura-inicial
+    targetRevision: main
     path: k8s/infrastructure/overlays/staging/observability/kube-prometheus-stack
 ---
 apiVersion: argoproj.io/v1alpha1
@@ -39,7 +39,7 @@ metadata:
   namespace: argocd
 spec:
   source:
-    targetRevision: Estructura-inicial
+    targetRevision: main
     path: k8s/infrastructure/overlays/staging/observability/loki
 ---
 apiVersion: argoproj.io/v1alpha1
@@ -49,7 +49,7 @@ metadata:
   namespace: argocd
 spec:
   source:
-    targetRevision: Estructura-inicial
+    targetRevision: main
     path: k8s/infrastructure/overlays/staging/observability/promtail
 ---
 apiVersion: argoproj.io/v1alpha1
@@ -59,7 +59,7 @@ metadata:
   namespace: argocd
 spec:
   source:
-    targetRevision: Estructura-inicial
+    targetRevision: main
     path: k8s/infrastructure/overlays/staging/observability/tempo
 ---
 apiVersion: argoproj.io/v1alpha1
@@ -69,7 +69,7 @@ metadata:
   namespace: argocd
 spec:
   source:
-    targetRevision: Estructura-inicial
+    targetRevision: main
     path: k8s/infrastructure/overlays/staging/minio
 ---
 apiVersion: argoproj.io/v1alpha1
@@ -79,7 +79,7 @@ metadata:
   namespace: argocd
 spec:
   source:
-    targetRevision: Estructura-inicial
+    targetRevision: main
     path: k8s/infrastructure/overlays/staging/velero-operator
 ---
 apiVersion: argoproj.io/v1alpha1
@@ -89,7 +89,7 @@ metadata:
   namespace: argocd
 spec:
   source:
-    targetRevision: Estructura-inicial
+    targetRevision: main
     path: k8s/infrastructure/overlays/staging/velero
 ---
 apiVersion: argoproj.io/v1alpha1
@@ -99,7 +99,7 @@ metadata:
   namespace: argocd
 spec:
   source:
-    targetRevision: Estructura-inicial
+    targetRevision: main
     path: k8s/apps/overlays/staging
 ---
 apiVersion: argoproj.io/v1alpha1
@@ -109,7 +109,7 @@ metadata:
   namespace: argocd
 spec:
   source:
-    targetRevision: Estructura-inicial
+    targetRevision: main
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -118,4 +118,4 @@ metadata:
   namespace: argocd
 spec:
   source:
-    targetRevision: Estructura-inicial
+    targetRevision: main

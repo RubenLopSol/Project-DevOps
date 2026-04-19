@@ -22,7 +22,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/RubenLopSol/Project-DevOps.git
-    targetRevision: Estructura-inicial
+    targetRevision: main
     path: k8s/infrastructure/overlays/prod/argocd
     kustomize: {}
   destination:

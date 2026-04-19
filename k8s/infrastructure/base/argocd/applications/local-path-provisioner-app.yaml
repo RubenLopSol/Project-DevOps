@@ -14,7 +14,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/RubenLopSol/Project-DevOps.git
-    targetRevision: Estructura-inicial
+    targetRevision: main
     # Same path for all environments — the provisioner is cluster-wide infrastructure
     path: k8s/infrastructure/base/local-path-provisioner
   destination:

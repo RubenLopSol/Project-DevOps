@@ -52,7 +52,7 @@ on:
 
 # The branch ArgoCD currently tracks. Change to `main` once stabilised.
 env:
-  TRACKED_BRANCH: Estructura-inicial
+  TRACKED_BRANCH: main
 
 jobs:
   update-manifests:
