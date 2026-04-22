@@ -60,7 +60,7 @@ additionalPrometheusRulesMap:
     groups:
       - name: openpanel-alerts
         rules:
-          - alert: ServiceDown
+          - alert: APIDown
             # Matches the ServiceMonitor job name: openpanel/openpanel-api
             expr: up{job="openpanel-api",namespace="openpanel"} == 0
             for: 2m
@@ -121,14 +121,23 @@ additionalPrometheusRulesMap:
               summary: "High memory usage on {{ $labels.pod }}"
               description: "Memory usage above 90% of the configured limit."
 
-          - alert: DatabaseDown
-            expr: pg_up == 0 or redis_up == 0
-            for: 1m
+          - alert: PostgresDown
+            expr: up{job="postgres-exporter",namespace="openpanel"} == 0
+            for: 2m
             labels:
               severity: critical
             annotations:
-              summary: "Database {{ $labels.job }} is down"
-              description: "Database unreachable for more than 1 minute."
+              summary: "Postgres is unreachable"
+              description: "Postgres has been unreachable for more than 2 minutes. Login, user data, and dashboard reads are failing."
+
+          - alert: RedisDown
+            expr: up{job="redis-exporter",namespace="openpanel"} == 0
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Redis is unreachable"
+              description: "Redis has been unreachable for more than 2 minutes. Tracking events cannot be queued and the worker has nothing to process."
 
 # ----------------------------------------------------------------------------
 # Grafana
