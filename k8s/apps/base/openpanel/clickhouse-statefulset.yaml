@@ -84,6 +84,8 @@ spec:
               mountPath: /var/log/clickhouse-server
             - name: tmp
               mountPath: /tmp
+            - name: users-d
+              mountPath: /etc/clickhouse-server/users.d
             - name: prometheus-config
               mountPath: /etc/clickhouse-server/config.d/prometheus.xml
               subPath: prometheus.xml
@@ -94,6 +96,8 @@ spec:
         - name: clickhouse-logs
           emptyDir: {}
         - name: tmp
+          emptyDir: {}
+        - name: users-d
           emptyDir: {}
   volumeClaimTemplates:
     - metadata:
