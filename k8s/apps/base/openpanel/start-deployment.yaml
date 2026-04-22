@@ -27,7 +27,7 @@ spec:
         workload: app
       containers:
         - name: start
-          image: ghcr.io/rubenlopsol/openpanel-start:main-aef4b94
+          image: ghcr.io/rubenlopsol/openpanel-start:main-c871e04
           ports:
             - containerPort: 3000
               name: http

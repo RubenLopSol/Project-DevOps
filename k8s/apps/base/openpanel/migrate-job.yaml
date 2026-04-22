@@ -57,7 +57,7 @@ spec:
               memory: 32Mi
       containers:
         - name: migrate
-          image: ghcr.io/rubenlopsol/openpanel-api:main-aef4b94
+          image: ghcr.io/rubenlopsol/openpanel-api:main-c871e04
           # Run prisma migrate deploy from the db package directory
           command:
             - node_modules/.bin/prisma
