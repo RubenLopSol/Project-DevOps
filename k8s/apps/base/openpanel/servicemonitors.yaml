@@ -40,15 +40,17 @@ spec:
     matchNames:
       - openpanel
   endpoints:
-    - port: metrics
-      interval: 15s
-      scrapeTimeout: 10s
+    - interval: 15s
       path: /metrics
+      port: metrics
       relabelings:
-        - sourceLabels: [__meta_kubernetes_pod_label_app]
+        - action: replace
+          sourceLabels: [__meta_kubernetes_pod_label_app]
           targetLabel: app
-        - sourceLabels: [__meta_kubernetes_pod_label_version]
+        - action: replace
+          sourceLabels: [__meta_kubernetes_pod_label_version]
           targetLabel: version
+      scrapeTimeout: 10s
 
 ---
 apiVersion: monitoring.coreos.com/v1
@@ -67,13 +69,14 @@ spec:
     matchNames:
       - openpanel
   endpoints:
-    - port: metrics
-      interval: 30s
-      scrapeTimeout: 10s
+    - interval: 30s
       path: /metrics
+      port: metrics
       relabelings:
-        - sourceLabels: [__meta_kubernetes_pod_label_app]
+        - action: replace
+          sourceLabels: [__meta_kubernetes_pod_label_app]
           targetLabel: app
+      scrapeTimeout: 10s
 
 ---
 apiVersion: monitoring.coreos.com/v1
@@ -92,13 +95,14 @@ spec:
     matchNames:
       - openpanel
   endpoints:
-    - port: metrics
-      interval: 30s
-      scrapeTimeout: 10s
+    - interval: 30s
       path: /metrics
+      port: metrics
       relabelings:
-        - sourceLabels: [__meta_kubernetes_pod_label_app]
+        - action: replace
+          sourceLabels: [__meta_kubernetes_pod_label_app]
           targetLabel: app
+      scrapeTimeout: 10s
 
 ---
 apiVersion: monitoring.coreos.com/v1
@@ -117,10 +121,11 @@ spec:
     matchNames:
       - openpanel
   endpoints:
-    - port: metrics
-      interval: 30s
-      scrapeTimeout: 10s
+    - interval: 30s
       path: /metrics
+      port: metrics
       relabelings:
-        - sourceLabels: [__meta_kubernetes_pod_label_app]
+        - action: replace
+          sourceLabels: [__meta_kubernetes_pod_label_app]
           targetLabel: app
+      scrapeTimeout: 10s
