@@ -15,6 +15,7 @@ resources:
   - pvc.yaml
   - deployment.yaml
   - service.yaml
+  - bucket-init-job.yaml
 
 labels:
   - pairs:

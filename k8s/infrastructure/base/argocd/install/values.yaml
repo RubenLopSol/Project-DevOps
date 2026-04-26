@@ -24,6 +24,14 @@ controller:
     limits:
       cpu: "1"
       memory: 1Gi
+  # Reconcile interval — how often the controller re-lists all watched
+  # resources to compensate for missed watch events. Default is 180s; we
+  # lower it to 60s so a missed hook-completion event self-heals within a
+  # minute instead of three. Trade-off is more API server load, which is
+  # negligible at this scale.
+  env:
+    - name: ARGOCD_RECONCILIATION_TIMEOUT
+      value: "60s"
   # Expose Prometheus metrics on :8082/metrics and create a ServiceMonitor
   # so kube-prometheus-stack scrapes argocd_app_info, argocd_app_sync_total, etc.
   metrics:
