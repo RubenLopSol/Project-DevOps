@@ -2,11 +2,15 @@
 # STAGING overlay — Minikube / local development
 #
 # Inherits everything from base and applies patches:
-#   - api-blue.yaml         : scale blue API to 1 replica, reduce resource requests
-#   - start.yaml            : reduce dashboard resource requests
-#   - worker.yaml           : reduce worker resource requests
-#   - postgres-storage.yaml : use local-path StorageClass (PV on correct nodeSelector node)
-#   - clickhouse-storage.yaml: same for ClickHouse
+#   - api-rollout.yaml          : scale Argo Rollouts api to 1 replica, reduce resource requests
+#   - start.yaml                : reduce dashboard resource requests
+#   - worker.yaml               : reduce worker resource requests
+#   - postgres-storage.yaml     : use local-path StorageClass (PV on correct nodeSelector node)
+#   - clickhouse-storage.yaml   : same for ClickHouse
+#   - redis-storage.yaml        : same for Redis
+#   - clickhouse-resources.yaml : trim ClickHouse to 250m/768Mi req for local testing
+#   - postgres-resources.yaml   : trim Postgres to 100m/128Mi req for local testing
+#   - redis-resources.yaml      : trim Redis to 50m/64Mi req for local testing
 #
 # local-path-provisioner (rancher.io/local-path) creates PV directories on the
 # node where the pod is scheduled — required for nodeSelector to work correctly
@@ -29,8 +33,12 @@ labels:
     includeSelectors: false
 
 patches:
-  - path: patches/api-blue.yaml
+  # - path: patches/api-rollout.yaml
   - path: patches/start.yaml
   - path: patches/worker.yaml
   - path: patches/postgres-storage.yaml
   - path: patches/clickhouse-storage.yaml
+  - path: patches/redis-storage.yaml
+  - path: patches/clickhouse-resources.yaml
+  - path: patches/postgres-resources.yaml
+  - path: patches/redis-resources.yaml

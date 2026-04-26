@@ -1,0 +1,22 @@
+# Switch redis to the local-path StorageClass on staging — same fix as
+# postgres-storage.yaml and clickhouse-storage.yaml.
+# Minikube's default hostpath provisioner always puts PV directories on the
+# control-plane node, even when the pod is pinned elsewhere with workload=app.
+# That obviously breaks on a multi-node cluster. local-path-provisioner
+# (rancher.io/local-path) creates the directory on whichever node the pod
+# actually runs on.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: openpanel
+spec:
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 2Gi
