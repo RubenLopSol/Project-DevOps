@@ -25,24 +25,10 @@ prometheus:
             requests:
               storage: 5Gi
 
-grafana:
-  resources:
-    requests:
-      cpu: 100m
-      memory: 128Mi
-    limits:
-      cpu: 200m
-      memory: 256Mi
-
-alertmanager:
-  alertmanagerSpec:
-    resources:
-      requests:
-        cpu: 20m
-        memory: 32Mi
-      limits:
-        cpu: 50m
-        memory: 64Mi
+# Grafana and Alertmanager are deployed as their own ArgoCD Applications;
+# their per-env sizing lives in:
+#   overlays/<env>/observability/grafana/values.yaml
+#   overlays/<env>/observability/alertmanager/values.yaml
 
 # ----------------------------------------------------------------------------
 # Minikube-specific: disable scraping of control-plane components that are

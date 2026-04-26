@@ -1,0 +1,178 @@
+# =============================================================================
+# Grafana — Helm values (standalone, decoupled from kube-prometheus-stack)
+# Chart: grafana/grafana
+# =============================================================================
+
+# ----------------------------------------------------------------------------
+# Admin credentials — pulled from the SealedSecret reconciled in the
+# observability namespace (see overlays/*/sealed-secrets/secrets.yaml).
+# ----------------------------------------------------------------------------
+admin:
+  existingSecret: grafana-admin-credentials
+  userKey: admin-user
+  passwordKey: admin-password
+
+nodeSelector:
+  workload: observability
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+# ----------------------------------------------------------------------------
+# Ingress
+# ----------------------------------------------------------------------------
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  hosts:
+    - grafana.local
+
+# ----------------------------------------------------------------------------
+# Datasources — Prometheus is the default, Loki and Tempo are added so logs
+# and traces are queryable side-by-side. Service names assume the standard
+# kube-prometheus-stack release name and the loki/tempo charts already in
+# this repo.
+# ----------------------------------------------------------------------------
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        uid: prometheus
+        type: prometheus
+        access: proxy
+        url: http://kube-prometheus-stack-prometheus.observability.svc.cluster.local:9090
+        isDefault: true
+        editable: false
+
+      - name: Loki
+        uid: loki
+        type: loki
+        access: proxy
+        url: http://loki-gateway.observability.svc.cluster.local
+        editable: false
+        jsonData:
+          derivedFields:
+            - datasourceUid: tempo
+              matcherRegex: "traceID=(\\w+)"
+              name: TraceID
+              url: "$${__value.raw}"
+
+      - name: Tempo
+        uid: tempo
+        type: tempo
+        access: proxy
+        url: http://tempo.observability.svc.cluster.local:3100
+        editable: false
+        jsonData:
+          tracesToLogs:
+            datasourceUid: loki
+            tags: ["job", "namespace", "pod"]
+          serviceMap:
+            datasourceUid: prometheus
+
+# ----------------------------------------------------------------------------
+# Sidecar — auto-discover dashboard ConfigMaps across all namespaces.
+# Any ConfigMap labelled `grafana_dashboard: "1"` is loaded without restart.
+# ----------------------------------------------------------------------------
+sidecar:
+  dashboards:
+    enabled: true
+    searchNamespace: ALL
+    label: grafana_dashboard
+    labelValue: "1"
+    folderAnnotation: grafana_folder
+    provider:
+      foldersFromFilesStructure: true
+  datasources:
+    enabled: false
+
+# ----------------------------------------------------------------------------
+# Dashboard providers — file-based dashboards bundled at chart render time.
+# CLUSTER VIEW
+#   15760 — Kubernetes / Views / Global
+#   1860  — Node Exporter Full
+#   7249  — Kubernetes Cluster
+#   3119  — Kubernetes cluster monitoring
+# OPENPANEL VIEW
+#   11159 — Node.js prom-client RED metrics
+#   9628  — PostgreSQL Database
+#   11835 — Redis Dashboard
+#   14192 — ClickHouse Overview
+# ----------------------------------------------------------------------------
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: cluster
+        orgId: 1
+        folder: "Cluster"
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/cluster
+      - name: openpanel
+        orgId: 1
+        folder: "OpenPanel"
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/openpanel
+
+dashboards:
+  cluster:
+    kubernetes-global:
+      gnetId: 15760
+      revision: 37
+      datasource:
+        - name: DS_PROMETHEUS
+          value: Prometheus
+    node-exporter-full:
+      gnetId: 1860
+      revision: 37
+      datasource:
+        - name: DS_PROMETHEUS
+          value: Prometheus
+    kubernetes-cluster:
+      gnetId: 7249
+      revision: 1
+      datasource: Prometheus
+    kubernetes-pods:
+      gnetId: 3119
+      revision: 2
+      datasource: Prometheus
+  openpanel:
+    openpanel-api-nodejs:
+      gnetId: 11159
+      revision: 1
+      datasource: Prometheus
+    postgres:
+      gnetId: 9628
+      revision: 7
+      datasource: Prometheus
+    redis:
+      gnetId: 11835
+      revision: 1
+      datasource: Prometheus
+    clickhouse:
+      gnetId: 14192
+      revision: 3
+      datasource:
+        - name: DS_PROMETHEUS
+          value: Prometheus
+
+# ----------------------------------------------------------------------------
+# ServiceMonitor — let Prometheus scrape Grafana's own /metrics.
+# kube-prometheus-stack installs the CRD; Loki/Tempo/Promtail rely on it too.
+# ----------------------------------------------------------------------------
+serviceMonitor:
+  enabled: true
+  labels: {}
+  interval: 30s

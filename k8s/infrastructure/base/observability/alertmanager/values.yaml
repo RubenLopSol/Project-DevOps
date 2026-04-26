@@ -1,0 +1,81 @@
+# =============================================================================
+# Alertmanager — Helm values (standalone, decoupled from kube-prometheus-stack)
+# Chart: prometheus-community/alertmanager
+# =============================================================================
+
+replicaCount: 1
+
+nodeSelector:
+  workload: observability
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi
+
+# ----------------------------------------------------------------------------
+# Service — Prometheus references this by (namespace, name, port).
+# Keep `port` named `http` — the Prometheus CR alerting block expects it.
+# ----------------------------------------------------------------------------
+service:
+  type: ClusterIP
+  port: 9093
+  portName: http
+
+# ----------------------------------------------------------------------------
+# Persistence — small PVC for the silence/notification log.
+# Local-path on Minikube; storageClass is overridden per-environment.
+# ----------------------------------------------------------------------------
+persistence:
+  enabled: true
+  size: 1Gi
+
+# ----------------------------------------------------------------------------
+# Ingress
+# ----------------------------------------------------------------------------
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: alertmanager.local
+      paths:
+        - path: /
+          pathType: Prefix
+
+# ----------------------------------------------------------------------------
+# ServiceMonitor so Prometheus scrapes Alertmanager's own metrics.
+# ----------------------------------------------------------------------------
+serviceMonitor:
+  enabled: true
+  interval: 30s
+
+# ----------------------------------------------------------------------------
+# Alertmanager configuration — same routing/inhibit/receiver shape that was
+# previously embedded in kube-prometheus-stack values.
+# Replace the 'null' receiver with a real integration in production.
+# ----------------------------------------------------------------------------
+config:
+  global:
+    resolve_timeout: 5m
+  route:
+    group_by: ['alertname', 'namespace', 'severity']
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 12h
+    receiver: 'null'
+    routes:
+      - matchers:
+          - severity = critical
+        receiver: 'null'
+        continue: false
+  inhibit_rules:
+    - source_matchers:
+        - severity = critical
+      target_matchers:
+        - severity = warning
+      equal: ['alertname', 'namespace']
+  receivers:
+    - name: 'null'

@@ -1,0 +1,25 @@
+# =============================================================================
+# Alertmanager — base chart definition
+#
+# Chart:   prometheus-community/alertmanager
+# Version: 1.13.0
+#
+# Standalone deploy (base values only):
+#   kustomize build --enable-helm k8s/infrastructure/base/observability/alertmanager | kubectl apply -f -
+#
+# Prometheus is wired to this Alertmanager via prometheus.alerting in
+# base/observability/kube-prometheus-stack/values.yaml. The Service name
+# is `alertmanager` on port `http` (9093) — keep them in sync.
+# =============================================================================
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+helmCharts:
+  - name: alertmanager
+    repo: https://prometheus-community.github.io/helm-charts
+    version: "1.13.0"
+    releaseName: alertmanager
+    namespace: observability
+    includeCRDs: false
+    valuesFile: values.yaml
