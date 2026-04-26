@@ -17,6 +17,7 @@ resources:
   - local-path-provisioner-app.yaml
   - sealed-secrets-app.yaml
   - cert-manager-app.yaml
+  - argo-rollouts-app.yaml
   - prometheus-app.yaml
   - loki-app.yaml
   - promtail-app.yaml

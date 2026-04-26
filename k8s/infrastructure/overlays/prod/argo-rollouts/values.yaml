@@ -1,0 +1,6 @@
+# =============================================================================
+# Argo Rollouts — PROD overrides
+# Merged on top of k8s/infrastructure/base/argo-rollouts/values.yaml
+# No prod-specific overrides needed beyond base — dashboard ingress is
+# environment-specific and is intentionally not exposed in prod by default.
+# =============================================================================

@@ -29,3 +29,10 @@ tempo:
           endpoint: 0.0.0.0:4317
         http:
           endpoint: 0.0.0.0:4318
+
+persistence:
+  enabled: true
+  size: 1Gi
+  storageClassName: local-path
+  accessModes:
+    - ReadWriteOnce

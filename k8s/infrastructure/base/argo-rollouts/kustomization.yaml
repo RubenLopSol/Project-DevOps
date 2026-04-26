@@ -1,0 +1,21 @@
+# =============================================================================
+# Argo Rollouts — base chart definition
+#
+# Chart:   argoproj/argo-rollouts
+# Version: 2.39.5
+# Mode:    Cluster-wide controller + dashboard
+#
+# Standalone deploy:
+#   kustomize build --enable-helm k8s/infrastructure/base/argo-rollouts | kubectl apply -f -
+# =============================================================================
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+helmCharts:
+  - name: argo-rollouts
+    repo: https://argoproj.github.io/argo-helm
+    version: "2.39.5"
+    releaseName: argo-rollouts
+    namespace: argo-rollouts
+    valuesFile: values.yaml

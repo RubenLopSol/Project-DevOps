@@ -1,0 +1,36 @@
+# =============================================================================
+# Argo Rollouts — Helm values
+# Chart: argoproj/argo-rollouts
+# Progressive delivery controller (canary, blue-green) + web dashboard
+# =============================================================================
+
+# CRDs are managed by the chart and kept on uninstall so Rollout CRs
+# (in the openpanel namespace) survive a controller redeploy.
+installCRDs: true
+keepCRDs: true
+
+# Cluster-wide controller — reconciles Rollouts in any namespace.
+clusterInstall: true
+
+controller:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+# Dashboard is enabled so `kubectl argo rollouts dashboard` and the web UI
+# at rollouts.local work. Ingress is configured per-environment in the overlay.
+dashboard:
+  enabled: true
+  readonly: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi

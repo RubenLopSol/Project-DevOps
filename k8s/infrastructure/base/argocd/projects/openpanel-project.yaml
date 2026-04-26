@@ -32,6 +32,8 @@ spec:
       server: https://kubernetes.default.svc
     - namespace: local-path-storage
       server: https://kubernetes.default.svc
+    - namespace: argo-rollouts
+      server: https://kubernetes.default.svc
   clusterResourceWhitelist:
     - group: ""
       kind: Namespace
@@ -71,4 +73,6 @@ spec:
     - group: bitnami.com
       kind: "*"
     - group: cert-manager.io
+      kind: "*"
+    - group: argoproj.io
       kind: "*"
