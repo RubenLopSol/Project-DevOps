@@ -1,0 +1,241 @@
+{
+  "annotations": { "list": [] },
+  "description": "OpenPanel application dashboard. Top section is the app workloads (pods + resources). Bottom section is the databases (Postgres, Redis, ClickHouse) with the panels that drive the alerts in additionalPrometheusRulesMap.openpanel-alerts.",
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "tags": ["openpanel", "app", "databases"],
+  "title": "OpenPanel",
+  "uid": "openpanel",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "weekStart": "",
+  "templating": {
+    "list": [
+      {
+        "name": "ds_prom",
+        "label": "Prometheus",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "selected": false, "text": "Prometheus", "value": "Prometheus" },
+        "hide": 0,
+        "refresh": 1
+      },
+      {
+        "name": "namespace",
+        "label": "Namespace",
+        "type": "constant",
+        "query": "openpanel",
+        "current": { "selected": true, "text": "openpanel", "value": "openpanel" },
+        "hide": 2
+      }
+    ]
+  },
+  "panels": [
+    { "type": "row", "id": 100, "title": "Application — pods & resources", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 } },
+
+    {
+      "type": "stat",
+      "id": 1,
+      "title": "Pods Running",
+      "description": "Pods in phase=Running in the openpanel namespace.",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "targets": [ { "expr": "sum(kube_pod_status_phase{namespace=\"$namespace\",phase=\"Running\"})", "refId": "A" } ],
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "auto" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null } ] }, "unit": "short" } }
+    },
+    {
+      "type": "stat",
+      "id": 2,
+      "title": "Pods Not Ready",
+      "description": "Pods in Pending, Failed or Unknown. Anything non-zero needs investigation.",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "targets": [ { "expr": "sum(kube_pod_status_phase{namespace=\"$namespace\",phase=~\"Pending|Failed|Unknown\"})", "refId": "A" } ],
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "auto" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] }, "unit": "short" } }
+    },
+    {
+      "type": "stat",
+      "id": 3,
+      "title": "API up?",
+      "description": "Mirrors the APIDown alert (up{job=\"openpanel-api\"} == 0 for 2m).",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "targets": [ { "expr": "min(up{job=\"openpanel-api\",namespace=\"$namespace\"})", "refId": "A" } ],
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value_and_name" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] }, "mappings": [ { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } } ] } }
+    },
+    {
+      "type": "stat",
+      "id": 4,
+      "title": "Container restarts (15m)",
+      "description": "Container restarts in the openpanel namespace over the last 15 minutes. Steady non-zero means something is crash-looping.",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "targets": [ { "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"$namespace\"}[15m]))", "refId": "A" } ],
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "auto" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 5 } ] }, "unit": "short" } }
+    },
+
+    {
+      "type": "timeseries",
+      "id": 5,
+      "title": "CPU per pod (cores)",
+      "description": "CPU consumed by each pod in the namespace.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "targets": [ { "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"$namespace\",container!=\"\",container!=\"POD\"}[5m]))", "legendFormat": "{{pod}}", "refId": "A" } ],
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10 }, "unit": "short" } },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "lastNotNull"] }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "type": "timeseries",
+      "id": 6,
+      "title": "Memory per pod (% of limit)",
+      "description": "Memory usage as a percentage of the pod's configured limit. The HighMemoryUsage alert fires above 90%.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "targets": [
+        { "expr": "100 * sum by (pod) (container_memory_usage_bytes{namespace=\"$namespace\",container!=\"\",container!=\"POD\"}) / sum by (pod) (container_spec_memory_limit_bytes{namespace=\"$namespace\",container!=\"\",container!=\"POD\"} > 0)", "legendFormat": "{{pod}}", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10 }, "unit": "percent", "min": 0, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 75 }, { "color": "red", "value": 90 } ] } } },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull"] }, "tooltip": { "mode": "multi" } }
+    },
+
+    {
+      "type": "timeseries",
+      "id": 7,
+      "title": "API request rate by status (req/s)",
+      "description": "RED — Rate. HTTP 2xx vs 5xx on the OpenPanel API. The HighErrorRate alert fires when 5xx / total > 5% for 5m.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "targets": [ { "expr": "sum by (status_code) (rate(http_request_duration_seconds_count{namespace=\"$namespace\"}[5m]))", "legendFormat": "{{status_code}}", "refId": "A" } ],
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10 }, "unit": "reqps" } },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "lastNotNull"] }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "type": "timeseries",
+      "id": 8,
+      "title": "API latency p50 / p95 / p99 (s)",
+      "description": "RED — Duration. The APIHighLatency alert fires when p99 > 2s for 5m.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 13 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket{namespace=\"$namespace\"}[5m])))", "legendFormat": "p50", "refId": "A" },
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{namespace=\"$namespace\"}[5m])))", "legendFormat": "p95", "refId": "B" },
+        { "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{namespace=\"$namespace\"}[5m])))", "legendFormat": "p99", "refId": "C" }
+      ],
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 5 }, "unit": "s", "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 2 } ] } } },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+
+    { "type": "row", "id": 101, "title": "Databases", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 21 } },
+
+    {
+      "type": "stat",
+      "id": 9,
+      "title": "Postgres up?",
+      "description": "Mirrors the PostgresDown alert (up{job=\"postgres-exporter\"} == 0 for 2m).",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 22 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "targets": [ { "expr": "min(up{job=\"postgres-exporter\",namespace=\"$namespace\"})", "refId": "A" } ],
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value_and_name" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] }, "mappings": [ { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } } ] } }
+    },
+    {
+      "type": "stat",
+      "id": 10,
+      "title": "Redis up?",
+      "description": "Mirrors the RedisDown alert (up{job=\"redis-exporter\"} == 0 for 2m).",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 22 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "targets": [ { "expr": "min(up{job=\"redis-exporter\",namespace=\"$namespace\"})", "refId": "A" } ],
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value_and_name" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] }, "mappings": [ { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } } ] } }
+    },
+    {
+      "type": "stat",
+      "id": 11,
+      "title": "ClickHouse up?",
+      "description": "Liveness of the ClickHouse pod (no exporter alert yet, so this is the closest signal).",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 22 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "targets": [ { "expr": "max(kube_pod_status_ready{namespace=\"$namespace\",condition=\"true\"} * on(pod) group_left() kube_pod_info{pod=~\"clickhouse.*\"})", "refId": "A" } ],
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value_and_name" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] }, "mappings": [ { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } } ] } }
+    },
+    {
+      "type": "stat",
+      "id": 12,
+      "title": "DB PVCs > 80% full",
+      "description": "Number of openpanel PVCs above 80% — once a DB volume fills, writes start failing.",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 22 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "targets": [ { "expr": "count(100 * kubelet_volume_stats_used_bytes{namespace=\"$namespace\"} / kubelet_volume_stats_capacity_bytes{namespace=\"$namespace\"} > 80) or vector(0)", "refId": "A" } ],
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "auto" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] }, "unit": "short" } }
+    },
+
+    {
+      "type": "timeseries",
+      "id": 13,
+      "title": "Postgres connections",
+      "description": "Active backends. A flat ceiling here usually means max_connections is being hit.",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 26 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "targets": [ { "expr": "sum by (datname) (pg_stat_database_numbackends{namespace=\"$namespace\"})", "legendFormat": "{{datname}}", "refId": "A" } ],
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10 }, "unit": "short" } },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "type": "timeseries",
+      "id": 14,
+      "title": "Redis memory used (bytes)",
+      "description": "Resident memory of the Redis instance. Compare against `redis_memory_max_bytes` to spot eviction risk.",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 26 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "targets": [ { "expr": "redis_memory_used_bytes{namespace=\"$namespace\"}", "legendFormat": "used", "refId": "A" } ],
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10 }, "unit": "bytes" } },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "type": "timeseries",
+      "id": 15,
+      "title": "DB PVC fill (%)",
+      "description": "Volume fill for every PVC in the namespace. Above 80% is the red zone for any database PVC.",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 26 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "targets": [ { "expr": "100 * kubelet_volume_stats_used_bytes{namespace=\"$namespace\"} / kubelet_volume_stats_capacity_bytes{namespace=\"$namespace\"}", "legendFormat": "{{persistentvolumeclaim}}", "refId": "A" } ],
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10 }, "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 70 }, { "color": "red", "value": 85 } ] } } },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+
+    { "type": "row", "id": 102, "title": "Active alerts (openpanel)", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 34 } },
+
+    {
+      "type": "alertlist",
+      "id": 16,
+      "title": "Firing or pending OpenPanel alerts",
+      "description": "Live view of every alert defined in additionalPrometheusRulesMap.openpanel-alerts: APIDown, HighErrorRate, APIHighLatency, NodeJSEventLoopLag, HighMemoryUsage, PostgresDown, RedisDown.",
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 35 },
+      "options": {
+        "showOptions": "current",
+        "maxItems": 30,
+        "sortOrder": 3,
+        "dashboardAlerts": false,
+        "alertName": "",
+        "dashboardTitle": "",
+        "tags": [],
+        "stateFilter": { "firing": true, "pending": true, "noData": false, "normal": false, "error": true },
+        "alertInstanceLabelFilter": "{alertname=~\"APIDown|HighErrorRate|APIHighLatency|NodeJSEventLoopLag|HighMemoryUsage|PostgresDown|RedisDown\"}"
+      }
+    }
+  ]
+}

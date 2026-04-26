@@ -15,3 +15,34 @@ helmCharts:
     valuesFile: ../../../../base/observability/grafana/values.yaml
     additionalValuesFiles:
       - values.yaml
+
+# ----------------------------------------------------------------------------
+# Dashboards — kept in lockstep with the base kustomization so the prod
+# render also produces the dashboard ConfigMaps the sidecar is watching for.
+# ----------------------------------------------------------------------------
+namespace: observability
+
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    grafana_dashboard: "1"
+
+configMapGenerator:
+  - name: grafana-dashboard-cluster
+    files:
+      - cluster.json=../../../../../../grafana-dashboards/cluster.json
+    options:
+      annotations:
+        grafana_folder: Cluster
+  - name: grafana-dashboard-openpanel
+    files:
+      - openpanel.json=../../../../../../grafana-dashboards/openpanel.json
+    options:
+      annotations:
+        grafana_folder: OpenPanel
+  - name: grafana-dashboard-logs-traces
+    files:
+      - logs-traces.json=../../../../../../grafana-dashboards/logs-traces.json
+    options:
+      annotations:
+        grafana_folder: Observability
