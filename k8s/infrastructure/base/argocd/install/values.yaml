@@ -10,6 +10,11 @@ configs:
   params:
     # Disable TLS between ArgoCD components — TLS is terminated at the Ingress.
     server.insecure: "true"
+    # Cap concurrent manifest generations. Default "0" = unlimited, which lets
+    # every Application refresh in parallel and OOMs the repo-server when the
+    # observability stack (kube-prometheus-stack, loki, tempo, promtail) all
+    # render at once. 4 keeps memory growth bounded.
+    reposerver.parallelism.limit: "4"
   cm:
     # Pass --enable-helm to every kustomize build ArgoCD runs.
     # Required for helmChartInflationGenerator used in observability,
@@ -52,11 +57,24 @@ server:
 repoServer:
   resources:
     requests:
-      cpu: 100m
-      memory: 128Mi
+      cpu: 250m
+      memory: 256Mi
     limits:
-      cpu: 500m
-      memory: 512Mi
+      # Helm rendering of kube-prometheus-stack + loki + tempo + promtail in
+      # parallel pushes the repo-server well past the chart default 512Mi.
+      # 1Gi gives ~2x headroom over observed peak (~500Mi). 1 CPU prevents
+      # throttling during parallel `helm template` calls.
+      cpu: "1"
+      memory: 1Gi
+  # Default probes use timeoutSeconds: 1, which the kubelet trips while the
+  # Go process is busy rendering manifests, causing spurious restarts on top
+  # of any actual OOMKill. Loosen the timeout and lower probe frequency.
+  livenessProbe:
+    timeoutSeconds: 5
+    periodSeconds: 30
+    failureThreshold: 6
+  readinessProbe:
+    timeoutSeconds: 5
   metrics:
     enabled: true
     serviceMonitor:
