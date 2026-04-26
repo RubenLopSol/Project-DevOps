@@ -34,12 +34,18 @@ prometheus:
     # Route alerts to the standalone alertmanager Application (sibling chart).
     # The prometheus-community/alertmanager chart creates a Service named
     # `alertmanager` on port `http` (9093) in the observability namespace.
-    alerting:
-      alertmanagers:
-        - namespace: observability
-          name: alertmanager
-          port: http
-          pathPrefix: /
+    #
+    # Use `alertingEndpoints` (not `alerting.alertmanagers`): the chart only
+    # renders Prometheus' `spec.alerting` block when either
+    # `alertmanager.enabled` is true or `prometheusSpec.alertingEndpoints` is
+    # set. We've disabled the bundled Alertmanager, so this is the path that
+    # actually wires Prometheus to the standalone instance.
+    alertingEndpoints:
+      - namespace: observability
+        name: alertmanager
+        port: http
+        pathPrefix: /
+        apiVersion: v2
 
     additionalScrapeConfigs:
       - job_name: "kubernetes-pods"
@@ -135,7 +141,11 @@ additionalPrometheusRulesMap:
               description: "Memory usage above 90% of the configured limit."
 
           - alert: PostgresDown
-            expr: up{job="postgres-exporter",namespace="openpanel"} == 0
+            # Job label is derived from the Service name (`postgres`), not the
+            # ServiceMonitor name. The Service exposes both 5432/postgres and
+            # 9187/postgres-exporter on the same Pod, so a single `up` series
+            # covers liveness of the exporter target.
+            expr: up{job="postgres",namespace="openpanel"} == 0
             for: 2m
             labels:
               severity: critical
@@ -144,7 +154,9 @@ additionalPrometheusRulesMap:
               description: "Postgres has been unreachable for more than 2 minutes. Login, user data, and dashboard reads are failing."
 
           - alert: RedisDown
-            expr: up{job="redis-exporter",namespace="openpanel"} == 0
+            # Job label is derived from the Service name (`redis`), not the
+            # ServiceMonitor name.
+            expr: up{job="redis",namespace="openpanel"} == 0
             for: 2m
             labels:
               severity: critical

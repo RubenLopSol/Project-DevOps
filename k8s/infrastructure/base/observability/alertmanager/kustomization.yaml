@@ -7,7 +7,8 @@
 # Standalone deploy (base values only):
 #   kustomize build --enable-helm k8s/infrastructure/base/observability/alertmanager | kubectl apply -f -
 #
-# Prometheus is wired to this Alertmanager via prometheus.alerting in
+# Prometheus is wired to this Alertmanager via
+# `prometheus.prometheusSpec.alertingEndpoints` in
 # base/observability/kube-prometheus-stack/values.yaml. The Service name
 # is `alertmanager` on port `http` (9093) — keep them in sync.
 # =============================================================================

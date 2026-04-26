@@ -5,6 +5,10 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+# Standalone ServiceMonitor — chart 1.13.0 has no template for it.
+resources:
+  - ../../../../base/observability/alertmanager/servicemonitor.yaml
+
 helmCharts:
   - name: alertmanager
     repo: https://prometheus-community.github.io/helm-charts
