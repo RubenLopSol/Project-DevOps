@@ -27,6 +27,10 @@ spec:
       selfHeal: true
     syncOptions:
       - ServerSideApply=true
+      # Compute diffs server-side so Kubernetes default-value injection on
+      # StatefulSet (podManagementPolicy, updateStrategy, probe defaults,
+      # zero-valued minReadySeconds) doesn't show as permanent drift.
+      - ServerSideDiff=true
     retry:
       limit: 5
       backoff:
