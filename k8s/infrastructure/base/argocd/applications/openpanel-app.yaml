@@ -1,7 +1,7 @@
-# Wave 4 — OpenPanel application.
-# Deployed AFTER observability (loki/promtail/tempo are wave 3) so scrape
-# targets and log tailing are already running when the app starts — no
-# missing-telemetry gap on first bring-up.
+# OpenPanel — sync wave 4.
+# Comes up after observability (Loki, Promtail, Tempo are wave 3) so the
+# moment the first pod starts emitting logs and metrics, something is
+# already there to scrape and tail it. Avoids a blind spot on cold start.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -15,19 +15,18 @@ spec:
   project: openpanel
   source:
     repoURL: https://github.com/RubenLopSol/Project-DevOps.git
-    targetRevision: release/main-c871e04
+    targetRevision: release/main-5faadfb
     # Set by overlays/*/argocd/patches/app-env.yaml — never hardcoded here
     path: PLACEHOLDER
   destination:
     server: https://kubernetes.default.svc
     namespace: openpanel
-  # volumeClaimTemplates is immutable once a StatefulSet is created.
-  # The staging overlay sets storageClassName: local-path, which is correct for
-  # fresh deploys (StatefulSets will be created with local-path from the start).
-  # For existing clusters bootstrapped before this patch was added, the StatefulSets
-  # retain their original storageClass and ArgoCD cannot patch the immutable field.
-  # TODO: remove this ignoreDifferences once staging is rebuilt from scratch —
-  # on a fresh cluster the field will match and this entry becomes a no-op.
+  # volumeClaimTemplates is immutable on a StatefulSet, so once a cluster is
+  # running we can't patch storageClassName. Fresh clusters get the right
+  # value (local-path) from the staging overlay; older clusters keep whatever
+  # they were created with, and ArgoCD rightly refuses to fight that.
+  # TODO: drop this ignoreDifferences once staging gets rebuilt — on a clean
+  # cluster the field already matches and this entry becomes a no-op.
   ignoreDifferences:
     - group: apps
       kind: StatefulSet
@@ -42,6 +41,13 @@ spec:
       - PrunePropagationPolicy=foreground
       - PruneLast=true
       - ServerSideApply=true
+      # On a fresh cluster ArgoCD reconciles every Application in parallel,
+      # so this app's dry-run can fire *before* kube-prometheus-stack has
+      # finished installing the ServiceMonitor / PodMonitor CRDs. Without
+      # this flag the dry-run errors with "no matches for kind ServiceMonitor",
+      # the retry budget runs out, and openpanel sits OutOfSync until
+      # someone hits sync by hand.
+      - SkipDryRunOnMissingResource=true
     retry:
       limit: 5
       backoff:

@@ -74,7 +74,7 @@ fail    = @echo -e "$(COLOR_ERROR)$(COLOR_BOLD)   ✖  $(1)$(COLOR_NONE)" >&2
 
 # =============================================================================
 
-.PHONY: help bootstrap preflight dev-up dev-down terraform-infra terraform-status terraform-destroy terraform-docs minikube-up minikube-down cluster-up cluster-down
+.PHONY: help bootstrap preflight dev-up dev-down terraform-infra terraform-status terraform-destroy terraform-docs minikube-up minikube-down cluster-up cluster-down reseal
 
 # Show help when running make with no arguments
 .DEFAULT_GOAL := help
@@ -103,10 +103,11 @@ help:
 	@echo -e "    make terraform-destroy  Permanently destroy all provisioned resources"
 	@echo ""
 	@echo -e "  $(COLOR_BOLD)Kubernetes$(COLOR_NONE)"
-	@echo -e "    make minikube-up        Create the 3-node local cluster and configure DNS"
+	@echo -e "    make minikube-up        Create the 3-node local cluster (cp / app / obs)"
 	@echo -e "    make minikube-down      Delete the cluster and remove /etc/hosts entries"
-	@echo -e "    make cluster-up         Full bring-up: minikube + ArgoCD + App-of-Apps"
+	@echo -e "    make cluster-up         Full bring-up: minikube + sealing-key + ArgoCD + stabilise"
 	@echo -e "    make cluster-down       Tear down the full cluster (alias for minikube-down)"
+	@echo -e "    make reseal             Re-seal the six SealedSecrets from .env plaintext"
 	@echo ""
 	@echo -e "  $(COLOR_WARNING)Terraform environment options:$(COLOR_NONE)"
 	@echo -e "    ENV=staging  (default) — uses LocalStack running in Docker"
@@ -165,16 +166,20 @@ bootstrap:
 # =============================================================================
 # preflight
 #
-# Runs every tool-and-config check needed by the local stack BEFORE we try to
-# build or start containers.
+# Quick sanity check on the host before docker compose runs. Cheaper to fail
+# here than halfway through a build.
 #
-# Checks performed (see scripts/preflight.sh for the full list):
-#   1. Docker daemon reachable
-#   2. Docker engine >= 24
-#   3. Docker Compose v2.20+
-#   4. .env file present
-#   5. /etc/hosts has host.docker.internal (needed for dashboard auth cookies)
-#   6. jq installed
+# What it looks at:
+#   - Docker daemon is reachable
+#   - Docker engine v24 or newer
+#   - docker compose plugin v2.20 or newer
+#   - .env exists (it won't fill it in for you)
+#   - /etc/hosts has host.docker.internal — the dashboard's auth cookies
+#     don't work without it
+#   - jq is on PATH
+#   - the OpenPanel fork is cloned at ../openpanel
+#
+# Logic lives in scripts/preflight.sh.
 # =============================================================================
 preflight:
 	@bash $(CURDIR)/scripts/preflight.sh
@@ -393,24 +398,28 @@ terraform-docs:
 # =============================================================================
 # minikube-up
 #
-# Creates a 3-node local Kubernetes cluster using the Docker driver and
-# bootstraps everything needed to deploy the full OpenPanel stack:
+# Brings up a 3-node Minikube cluster on the docker driver. The heavy
+# lifting is in scripts/setup-minikube.sh; this target just calls it.
 #
-#   1. Checks that minikube, kubectl and docker are installed
-#   2. Starts the cluster (3 nodes, 4 CPUs / 4 GiB / 40 GiB each)
-#   3. Waits for all nodes to be Ready
-#   4. Labels each node by workload type (app / observability)
-#   5. Raises inotify limits on all nodes (required for Promtail)
-#   6. Creates the base Kubernetes namespaces
+# What the script does:
+#   1. Checks minikube, kubectl and docker are on PATH
+#   2. Starts the cluster — 3 nodes, each with 2 CPUs, 2.5 GiB RAM, 40 GiB disk
+#   3. Waits for every node to report Ready
+#   4. Labels the two workers (workload=app, workload=observability). The
+#      control-plane keeps its NoSchedule taint so app pods can't land there
+#   5. Bumps inotify limits on every node — Promtail needs the headroom
+#   6. Creates the base namespaces
 #   7. Installs the local-path storage provisioner
-#   8. Adds service hostnames to /etc/hosts
+#   8. Adds service hostnames (openpanel.local, argocd.local, etc.) to /etc/hosts
 #
-# Node layout:
-#   devops-cluster       control-plane  — Kubernetes internals only
-#   devops-cluster-m02   app node       — API, Worker, PostgreSQL, Redis, ClickHouse
-#   devops-cluster-m03   observability  — Prometheus, Grafana, Loki, Tempo
+# Who lives where:
+#   devops-cluster       control-plane — tainted, unlabelled
+#   devops-cluster-m02   workload=app           — API, Worker, Postgres,
+#                                                 Redis, ClickHouse
+#   devops-cluster-m03   workload=observability — Prometheus, Grafana,
+#                                                 Loki, Tempo, ArgoCD
 #
-# Resource footprint: 12 CPUs / 12 GiB RAM / 120 GiB disk total
+# Costs the host 6 CPUs, 7.5 GiB RAM and 120 GiB disk all in.
 # =============================================================================
 minikube-up:
 	$(call header,Creating local Kubernetes cluster)
@@ -420,26 +429,60 @@ minikube-up:
 # =============================================================================
 # cluster-up
 #
-# One-shot full bring-up: Minikube cluster + ArgoCD + App-of-Apps.
+# One-shot full bring-up: Minikube cluster + ArgoCD + App-of-Apps + re-seal.
 # Equivalent to running, in order:
 #   make minikube-up
 #   ./scripts/install-argocd.sh $(ENV)       # also applies bootstrap-app.yaml
+#   ./scripts/reseal-secrets.sh              # re-seals six SealedSecrets
+#
+# The re-seal step is mandatory every time the cluster is (re-)created,
+# because the sealed-secrets controller regenerates its keypair on each
+# install and the six SealedSecrets committed in git were sealed against
+# the previous keypair. Without re-sealing, Grafana, MinIO, and every
+# openpanel pod will CrashLoop on missing Secrets. See
+# docs/testing-local-stack.md §10.7 for the full background.
 #
 # ENV defaults to staging — override with: make cluster-up ENV=prod
 # =============================================================================
 cluster-up:
 	$(call header,Full cluster bring-up — environment: $(ENV))
 
-	$(call step,Step 1/3 · Minikube cluster)
+	$(call step,Step 1/4 · Minikube cluster (creates namespaces incl. sealed-secrets))
 	@bash scripts/setup-minikube.sh
 
-	$(call step,Step 2/3 · ArgoCD install + bootstrap)
+	$(call step,Step 2/4 · Ensure Sealed-Secrets keypair exists (restore backup OR generate fresh))
+	@bash scripts/ensure-sealing-key.sh
+
+	$(call step,Step 3/4 · ArgoCD install + bootstrap (controller adopts the keypair from step 2))
 	@bash scripts/install-argocd.sh $(ENV)
 
-	$(call success,Cluster + ArgoCD up. ArgoCD is now syncing all applications.)
+	$(call step,Step 4/4 · Stabilise SealedSecrets (auto-checks decrypt; reseals only if needed))
+	@bash scripts/stabilize-secrets.sh
+
+	$(call success,Cluster + ArgoCD up + SealedSecrets stable.)
 	@echo ""
 	@echo -e "   Monitor sync progress:  $(COLOR_BOLD)kubectl get applications -n argocd -w$(COLOR_NONE)"
 	@echo -e "   ArgoCD UI:              $(COLOR_BOLD)http://argocd.local$(COLOR_NONE)"
+	@echo ""
+	@echo -e "   $(COLOR_WARNING)Note for thesis reviewers:$(COLOR_NONE) the cluster is fully working — no further steps."
+	@echo -e "   The keypair generated for this machine lives at $(COLOR_BOLD)~/.config/openpanel/sealing-key.yaml$(COLOR_NONE)"
+	@echo -e "   so subsequent $(COLOR_BOLD)make cluster-up$(COLOR_NONE) bring-ups skip the reseal step entirely."
+
+
+# =============================================================================
+# reseal
+#
+# Stand-alone re-seal step — regenerates the six SealedSecrets from the
+# plaintext values in .env (plus sensible defaults for Grafana/MinIO)
+# against the sealed-secrets controller's current public key, then
+# applies them live.
+#
+# Use this after 'make cluster-up' only if you skipped the automatic
+# re-seal, after a manual 'kubectl rollout restart' of the controller,
+# or any other time you've seen pods stuck Pending on a missing Secret.
+# =============================================================================
+reseal:
+	@bash scripts/reseal-secrets.sh
 
 
 # =============================================================================

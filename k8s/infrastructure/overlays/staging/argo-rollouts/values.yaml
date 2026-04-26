@@ -1,25 +1,12 @@
-# =============================================================================
-# Argo Rollouts — STAGING overrides
-# Merged on top of k8s/infrastructure/base/argo-rollouts/values.yaml
-# Adds an ingress for the dashboard at rollouts.local
-# =============================================================================
-
-# Single replica is sufficient for staging.
-controller:
-  replicas: 1
+# Staging overrides on top of base/argo-rollouts/values.yaml.
+# Only the dashboard ingress differs here.
 
 dashboard:
+  enabled: true
   ingress:
     enabled: true
     ingressClassName: nginx
-    annotations:
-      cert-manager.io/cluster-issuer: openpanel-selfsigned
     hosts:
       - rollouts.local
-    paths:
-      - /
-    pathType: Prefix
-    tls:
-      - secretName: rollouts-tls
-        hosts:
-          - rollouts.local
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "false"

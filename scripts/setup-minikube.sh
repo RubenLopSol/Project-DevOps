@@ -1,37 +1,58 @@
 #!/bin/bash
 # =============================================================================
-# setup-minikube.sh — Local Kubernetes Cluster Bootstrap
+# setup-minikube.sh — local Kubernetes cluster bootstrap
 #
-# Run this script once on a fresh machine before deploying anything.
-# It creates a 3-node Minikube cluster that mirrors a real production
-# environment, assigns each node a dedicated role, creates namespaces,
-# and configures local DNS so every service is reachable by hostname.
+# Run this once on a fresh machine before anything else. It builds a 3-node
+# Minikube cluster shaped like a tiny prod node-pool layout: one node per
+# role (control-plane, app, observability). Every workload is pinned to its
+# pool with nodeSelector, so observability pods can't eat the app tier's
+# resources and vice versa.
 #
 # Usage:
 #   ./scripts/setup-minikube.sh
 #
-# What it does, in order:
-#   1. Checks that minikube, kubectl and docker are installed
-#   2. Creates the cluster (skips if already running)
-#   3. Waits for all nodes to become Ready
-#   4. Labels each node by workload type
-#   5. Increases inotify limits (required for Promtail log watching)
-#   6. Creates the base Kubernetes namespaces
-#   7. Installs the local-path storage provisioner
-#   8. Adds all service hostnames to /etc/hosts
+# What happens, in order:
+#   1. Check minikube, kubectl and docker are on PATH
+#   2. Start the cluster (skipped if it's already up)
+#   3. Wait until every node reports Ready
+#   4. Label the two workers (workload=app / workload=observability). The
+#      control-plane keeps its NoSchedule taint so app pods can't land there
+#   5. Bump inotify limits so Promtail doesn't run out of watch handles
+#   6. Apply the base Kubernetes namespaces
+#   7. Install the local-path storage provisioner
+#   8. Add the service hostnames to /etc/hosts
 #
 # Node layout:
-#   devops-cluster       control-plane — Kubernetes internals only
-#   devops-cluster-m02   app node      — OpenPanel API, Worker, databases
-#   devops-cluster-m03   observability — Prometheus, Grafana, Loki, Tempo
+#   devops-cluster       control-plane (tainted) — kube-apiserver, etcd,
+#                                                  ingress-nginx, ArgoCD
+#                                                  server, cert-manager
+#   devops-cluster-m02   workload=app            — OpenPanel API, Worker,
+#                                                  Start, PostgreSQL,
+#                                                  Redis, ClickHouse
+#   devops-cluster-m03   workload=observability  — Prometheus, Grafana,
+#                                                  Loki + storage,
+#                                                  Tempo + storage,
+#                                                  Alertmanager, caches
 #
-# Why 3 nodes?
-#   Separating workloads across nodes mirrors real production node pools
-#   where you typically keep observability tools isolated from application
-#   traffic. It also prevents a heavy scrape job from starving the API.
+# Promtail is the only thing that runs everywhere — it's a DaemonSet, so
+# logs from the app node and the control-plane both make it back to Loki
+# on the obs node.
 #
-# Resource footprint:
-#   Each node gets 4 CPUs, 4 GB RAM and 40 GB disk → 12 CPUs / 12 GB / 120 GB total
+# Resource budget:
+#   2 CPUs, 2.5 GiB RAM, 40 GB disk per node → 6 CPUs / 7.5 GiB / 120 GB total.
+#
+#   Why 2 CPUs per node?
+#   On a 4-core / 8-thread host, handing Minikube 6 vCPUs still leaves the
+#   kernel, Docker, IDE and browser two threads to share. Push past that
+#   and the scheduler starts thrashing — the desktop freezes, the laptop
+#   looks hung. On 8+ physical cores you can safely go to 3 or 4.
+#
+#   Why 2.5 GiB per node?
+#   16 GiB laptops lose 4–5 GiB to the host baseline (kernel, Docker, IDE,
+#   a couple of browser tabs). 7.5 GiB to the cluster leaves ~3 GiB of
+#   headroom — fine for a thesis demo. The app node sits around 85 %
+#   memory utilisation; if you start running real load against it, push
+#   MEMORY up to 3072.
 # =============================================================================
 
 set -euo pipefail
@@ -39,21 +60,23 @@ set -euo pipefail
 
 # =============================================================================
 # Configuration
-# All values that might need changing are declared here at the top.
-# Nothing is hardcoded deeper in the script.
+# Everything that might need tuning lives up here at the top — nothing is
+# buried further down the script.
 # =============================================================================
 
 CLUSTER_NAME="devops-cluster"
 K8S_VERSION="v1.28.0"
 NODES=3
-CPUS=4
-MEMORY="4096"   # MiB per node
+CPUS=2          # per node — see resource-footprint comment in the header
+MEMORY="2560"   # MiB per node — 2.5 GiB; see header for the budget rationale
 DISK="40g"      # per node
 DRIVER="docker"
 
-# Worker node names follow Minikube's multi-node naming convention
-NODE_APP="${CLUSTER_NAME}-m02"   # receives label workload=app
-NODE_OBS="${CLUSTER_NAME}-m03"   # receives label workload=observability
+# Node names follow Minikube's multi-node naming convention:
+# the control-plane keeps the bare cluster name, workers get an -mNN suffix.
+NODE_CTRL="${CLUSTER_NAME}"       # control-plane — stays tainted, no workload label
+NODE_APP="${CLUSTER_NAME}-m02"    # worker        — label workload=app
+NODE_OBS="${CLUSTER_NAME}-m03"    # worker        — label workload=observability
 
 # Node labels — these must match the nodeSelector in every K8s manifest.
 # If you change them here, update the manifests in k8s/apps/base/ as well.
@@ -122,11 +145,11 @@ note() {
 
 
 # =============================================================================
-# Step 1 — Check that all required tools are installed
+# Step 1 — Check required tools
 #
-# We check for the three tools this script depends on: minikube, kubectl and
-# docker. If any are missing we list them all before exiting so you can
-# install everything in one go rather than discovering them one by one.
+# Three things have to be on PATH: minikube, kubectl, docker. If any are
+# missing we list all of them before bailing out, so you can install the
+# whole set in one go instead of running the script three times.
 # =============================================================================
 check_prerequisites() {
   header "Checking required tools"
@@ -180,11 +203,11 @@ check_prerequisites() {
 
 
 # =============================================================================
-# Step 3 — Wait for all nodes to report Ready
+# Step 3 — Wait until every node reports Ready
 #
-# Minikube returns from `minikube start` before all nodes have fully joined
-# the cluster. Labelling a node that is still initialising causes a
-# "node not found" error, so we poll until every node is Ready.
+# `minikube start` returns before all nodes have actually joined, so if we
+# try to label one too early kubectl just says "node not found". Poll until
+# everyone's in.
 # =============================================================================
 wait_for_nodes() {
   local max_attempts=30
@@ -211,18 +234,18 @@ wait_for_nodes() {
 # =============================================================================
 # Step 4 — Label each worker node by workload type
 #
-# Labels tell the Kubernetes scheduler where to place each pod. Every manifest
-# in this repo carries a matching nodeSelector, so pods are pinned to the
-# correct node and cannot drift to the wrong one.
+# Labels are how we tell the scheduler where to put each pod. Every manifest
+# in this repo has a matching nodeSelector, so pods stay pinned to the right
+# pool and don't wander.
 #
-# Promtail is the only exception — it runs as a DaemonSet which means one
-# instance per node. It must collect logs from every node, not just the
-# observability node, so it has no nodeSelector.
+# Promtail is the exception. It's a DaemonSet — one instance per node —
+# because it has to collect logs from everywhere, not just the obs node.
+# So it ships without a nodeSelector.
 # =============================================================================
 label_nodes() {
   header "Assigning workload labels to nodes"
 
-  # Make sure both worker nodes exist before attempting to label them
+  # Make sure the worker nodes exist before attempting to label them.
   for node in "${NODE_APP}" "${NODE_OBS}"; do
     if ! kubectl get node "${node}" &>/dev/null; then
       fail "Node '${node}' was not found in the cluster."
@@ -231,13 +254,21 @@ label_nodes() {
     fi
   done
 
+  # The control-plane keeps its NoSchedule taint on purpose. Minikube's
+  # ingress and metrics-server addons install with the matching toleration,
+  # so they still land here, but nothing user-facing can. ArgoCD doesn't
+  # tolerate the taint by default, so it ends up on the workers — fine,
+  # the chart is happy either way.
+  step "Leaving control-plane (${NODE_CTRL}) tainted — only system addons run there"
+  success "Control-plane taint preserved"
+
   step "Labelling ${NODE_APP} as the application node"
   kubectl label node "${NODE_APP}" "${LABEL_KEY}=${LABEL_APP}" --overwrite
   success "${NODE_APP}  →  ${LABEL_KEY}=${LABEL_APP}  (OpenPanel API, Worker, PostgreSQL, Redis, ClickHouse)"
 
   step "Labelling ${NODE_OBS} as the observability node"
   kubectl label node "${NODE_OBS}" "${LABEL_KEY}=${LABEL_OBS}" --overwrite
-  success "${NODE_OBS}  →  ${LABEL_KEY}=${LABEL_OBS}  (Prometheus, Grafana, Loki, Tempo)"
+  success "${NODE_OBS}  →  ${LABEL_KEY}=${LABEL_OBS}  (Prometheus, Grafana, Loki+storage, Tempo+storage)"
 
   echo ""
   note "Promtail runs on ALL nodes as a DaemonSet — it collects logs from every pod"
@@ -293,11 +324,11 @@ label_nodes
 
 
 # =============================================================================
-# Step 5 — Increase inotify limits on every node
+# Step 5 — Raise inotify limits on every node
 #
-# Promtail watches pod log files using Linux inotify. The default kernel
-# limits are too low when many containers are running simultaneously.
-# We raise them on all three nodes so Promtail never hits "too many open files".
+# Promtail uses inotify to watch pod log files. The default kernel limits
+# run out fast once you have a lot of containers, and Promtail starts
+# spitting "too many open files". Bump them on all three nodes up front.
 # =============================================================================
 header "Raising inotify limits for Promtail log watching"
 
@@ -316,9 +347,9 @@ success "inotify limits applied on all nodes"
 # =============================================================================
 # Step 6 — Create Kubernetes namespaces
 #
-# All namespaces are declared in a single manifest so they can be tracked
-# in Git and applied idempotently. Creating them before ArgoCD boots means
-# ArgoCD never tries to create a namespace that already exists.
+# All namespaces live in one manifest so they're tracked in Git and applying
+# them is idempotent. Doing this before ArgoCD boots means ArgoCD never
+# fights us over creating a namespace that already exists.
 # =============================================================================
 header "Creating Kubernetes namespaces"
 
@@ -330,13 +361,13 @@ kubectl get namespaces
 # =============================================================================
 # Step 7 — Install the local-path storage provisioner
 #
-# The default Minikube storage provisioner creates PersistentVolume directories
-# on the control-plane node regardless of where the pod is actually scheduled.
-# This breaks nodeSelectors — a database pod pinned to the app node cannot
-# access its data if the directory is on the control-plane node.
+# Minikube's built-in provisioner always creates PV directories on the
+# control-plane node, no matter where the pod is scheduled. That kills our
+# nodeSelectors: a database pod pinned to the app node ends up with its
+# data sitting on a node it can't reach.
 #
-# Rancher's local-path provisioner creates the directory on the node where
-# the pod runs, which is exactly what we need for a multi-node setup.
+# Rancher's local-path provisioner puts the directory on whichever node
+# the pod is actually running on — exactly what a multi-node cluster needs.
 # =============================================================================
 header "Installing local-path storage provisioner"
 
@@ -355,12 +386,11 @@ success "Storage provisioner installed — StorageClass 'local-path' is ready"
 
 
 # =============================================================================
-# Step 8 — Configure /etc/hosts for local DNS
+# Step 8 — Local DNS in /etc/hosts
 #
-# The ingress controller exposes all services on the Minikube IP.
-# Adding hostnames to /etc/hosts lets you use friendly URLs like
-# http://openpanel.local instead of remembering the IP address.
-# If an entry already exists (e.g. from a previous run), we update it.
+# The ingress controller exposes everything on a single Minikube IP. Adding
+# hostnames here lets you hit http://openpanel.local instead of typing the
+# IP. If an entry from a previous run is still there, we replace it.
 # =============================================================================
 header "Configuring local DNS in /etc/hosts"
 

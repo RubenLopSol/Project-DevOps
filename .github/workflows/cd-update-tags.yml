@@ -14,11 +14,11 @@ name: CD-Update-GitOps-Manifests
 # ArgoCD polls the infra repo on its tracked branch. When it sees the updated
 # image references it reconciles the openpanel Application → rolls out.
 #
-# Blue-Green note:
-#   Only api-deployment-BLUE is updated. Green keeps the previous image tag
-#   intentionally — green serves as the instant rollback path. When you run
-#   the blue-green switch, green brings the previous known-good version up.
-#   This is a design trade-off: rollback speed over always-identical images.
+# Argo Rollouts canary note:
+#   The api manifest is a Rollout (api-rollout.yaml). This workflow updates a
+#   single image reference; the Argo Rollouts controller in-cluster handles
+#   the canary stages (25 % → pause 30 s → 50 % → pause 60 s → 100 %) and
+#   instant rollback on `kubectl argo rollouts abort openpanel-api -n openpanel`.
 #
 # Trigger contract (from the fork):
 #   event-type:    app-image-published
@@ -87,11 +87,12 @@ jobs:
       # (whether it currently points to main-<old-sha> or any other tag).
       # -----------------------------------------------------------------------
 
-      - name: Update API image tag (blue deployment)
-        # Only blue is updated — see Blue-Green note in the workflow header.
+      - name: Update API image tag (Rollout)
+        # The Argo Rollouts controller takes over the canary stages
+        # (25 % → 50 % → 100 %) automatically once ArgoCD syncs this change.
         run: |
           sed -i "s|image: ghcr.io/.*/openpanel-api:.*|image: ghcr.io/${{ steps.ctx.outputs.owner }}/openpanel-api:main-${{ steps.ctx.outputs.short }}|g" \
-            k8s/apps/base/openpanel/api-deployment-blue.yaml
+            k8s/apps/base/openpanel/api-rollout.yaml
 
       - name: Update Start image tag
         run: |
@@ -104,9 +105,9 @@ jobs:
             k8s/apps/base/openpanel/worker-deployment.yaml
 
       - name: Update Migrate job image tag
-        # The PreSync migration job uses the same API image.
-        # Keeping it in sync ensures migrations always run with the same code
-        # version as the API that will be deployed after them.
+        # The migration job (a Sync hook on the openpanel app) uses the same
+        # API image. Keeping it in sync ensures migrations always run with
+        # the same code version as the API that will be deployed after them.
         run: |
           sed -i "s|image: ghcr.io/.*/openpanel-api:.*|image: ghcr.io/${{ steps.ctx.outputs.owner }}/openpanel-api:main-${{ steps.ctx.outputs.short }}|g" \
             k8s/apps/base/openpanel/migrate-job.yaml

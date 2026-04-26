@@ -26,13 +26,13 @@ spec:
       server: https://kubernetes.default.svc
     - namespace: cert-manager
       server: https://kubernetes.default.svc
+    - namespace: argo-rollouts
+      server: https://kubernetes.default.svc
     - namespace: kube-system
       server: https://kubernetes.default.svc
     - namespace: argocd
       server: https://kubernetes.default.svc
     - namespace: local-path-storage
-      server: https://kubernetes.default.svc
-    - namespace: argo-rollouts
       server: https://kubernetes.default.svc
   clusterResourceWhitelist:
     - group: ""
@@ -75,4 +75,5 @@ spec:
     - group: cert-manager.io
       kind: "*"
     - group: argoproj.io
+      # Allows Rollout, AnalysisTemplate, AnalysisRun, Experiment from Argo Rollouts.
       kind: "*"

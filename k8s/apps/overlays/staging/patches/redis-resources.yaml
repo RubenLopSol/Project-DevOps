@@ -1,0 +1,21 @@
+# Staging trim for Redis.
+# Idles at under 10 MiB locally — BullMQ queues and the cache barely warm.
+# So the request can drop hard. Limit stays at 256Mi to absorb the odd
+# burst, mostly a backed-up queue during a load test.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: openpanel
+spec:
+  template:
+    spec:
+      containers:
+        - name: redis
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi

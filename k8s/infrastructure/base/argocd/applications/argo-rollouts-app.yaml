@@ -1,7 +1,5 @@
-# Wave 1 — Argo Rollouts controller + dashboard + CRDs.
-# Must be running before any Rollout resource is reconciled. OpenPanel
-# (wave 4) deploys a Rollout in k8s/apps/base/openpanel/api-rollout.yaml
-# that the controller in this namespace owns.
+# Sync wave 1: controller + CRDs + dashboard. Must come up before openpanel
+# (wave 4), which references the Rollout CRD installed here.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -24,14 +22,14 @@ spec:
     namespace: argo-rollouts
   syncPolicy:
     automated:
-      # prune is disabled on purpose: Rollout CRDs are kept on uninstall
-      # (keepCRDs: true) so accidental git removal cannot blast Rollout CRs.
+      # prune: false so ArgoCD never auto-deletes the controller (which would
+      # take the Rollout CRD with it).
       prune: false
       selfHeal: true
       allowEmpty: false
     syncOptions:
-      # CRDs (Rollout, AnalysisTemplate, etc.) are created by the chart in
-      # the same sync as the controller Deployment that watches them.
+      # CRDs are created in the same sync; skip dry-run so the Rollout CR
+      # doesn't fail validation against a CRD that isn't Established yet.
       - ServerSideApply=true
       - SkipDryRunOnMissingResource=true
       - CreateNamespace=false

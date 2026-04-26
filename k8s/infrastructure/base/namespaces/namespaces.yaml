@@ -58,9 +58,9 @@ metadata:
   labels:
     app.kubernetes.io/part-of: cert-manager
 ---
-# argo-rollouts: dedicated namespace for the Argo Rollouts controller and
-# dashboard. Rollout CRs live in their target namespaces (e.g. openpanel) and
-# the controller reconciles them cluster-wide (clusterInstall: true).
+# argo-rollouts: controller + dashboard live here. Rollout and Analysis* CRs
+# sit in their target namespaces (e.g. openpanel); the controller watches
+# across namespaces and patches their ReplicaSets and Service selectors.
 apiVersion: v1
 kind: Namespace
 metadata:

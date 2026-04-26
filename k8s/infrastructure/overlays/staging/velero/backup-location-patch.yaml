@@ -1,10 +1,13 @@
-# Staging BackupStorageLocation patch
-# Points Velero at the in-cluster MinIO instance (namespace: backup).
-# MinIO is deployed by ArgoCD (wave 2) and provides S3-compatible storage
-# with a 5Gi PVC backed by local-path — fully self-contained, no host dependency.
+# Staging BackupStorageLocation — points Velero at the in-cluster MinIO.
+# MinIO lives in the `backup` namespace, deployed by ArgoCD (wave 2) on a
+# 5Gi local-path PVC. No host-side dependency.
 #
-# Bucket: velero-backups (created on first deploy via initJob or manually with mc)
-# Credentials: minio / minio123 (staging-only, non-sensitive values)
+# The `velero-backups` bucket gets created on first deploy (initJob or by
+# hand with `mc`). Credentials come from the velero/velero Secret, which
+# the velero-operator overlay populates from values.yaml — defaults are
+# minioadmin/minioadmin. They have to line up with the minio-credentials
+# SealedSecret (MinIO reads them as MINIO_ROOT_USER / MINIO_ROOT_PASSWORD)
+# or the BSL won't authenticate. project-step-by-step.md §12 has the rest.
 apiVersion: velero.io/v1
 kind: BackupStorageLocation
 metadata:

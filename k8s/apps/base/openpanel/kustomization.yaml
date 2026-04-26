@@ -1,11 +1,6 @@
-# =============================================================================
-# Base — OpenPanel application layer
-#
-# Defines all resources for the OpenPanel stack: API (blue/green), Dashboard,
-# Worker, PostgreSQL, ClickHouse, Redis, Ingress, and NetworkPolicies.
-# Environment-specific tuning (replicas, resources, TLS) is applied via
-# overlays/staging and overlays/prod.
-# =============================================================================
+# Base for the OpenPanel app stack: API (Rollout), Dashboard, Worker,
+# Postgres, ClickHouse, Redis, Ingress, NetworkPolicies. Environment-specific
+# tuning is applied via overlays/{staging,prod}.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -14,10 +9,10 @@ namespace: openpanel
 resources:
   # Config
   - configmap.yaml
-  # API (Blue-Green)
-  - api-deployment-blue.yaml
-  - api-deployment-green.yaml
+  # API (Argo Rollouts canary)
+  - api-rollout.yaml
   - api-service.yaml
+  - api-canary-service.yaml
   # Dashboard
   - start-deployment.yaml
   - start-service.yaml

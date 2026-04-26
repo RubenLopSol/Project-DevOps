@@ -215,6 +215,16 @@ jobs:
         run: kustomize build --enable-helm --load-restrictor LoadRestrictionsNone k8s/infrastructure/overlays/prod/cert-manager > /tmp/rendered-infra-cert-manager-prod.yaml
 
       # -----------------------------------------------------------------------
+      # infrastructure layer — argo-rollouts (Helm chart)
+      # -----------------------------------------------------------------------
+
+      - name: Kustomize build — infra/argo-rollouts/staging
+        run: kustomize build --enable-helm --load-restrictor LoadRestrictionsNone k8s/infrastructure/overlays/staging/argo-rollouts > /tmp/rendered-infra-argo-rollouts-staging.yaml
+
+      - name: Kustomize build — infra/argo-rollouts/prod
+        run: kustomize build --enable-helm --load-restrictor LoadRestrictionsNone k8s/infrastructure/overlays/prod/argo-rollouts > /tmp/rendered-infra-argo-rollouts-prod.yaml
+
+      # -----------------------------------------------------------------------
       # infrastructure layer — local-path-provisioner (pure Kustomize)
       # -----------------------------------------------------------------------
 
@@ -362,6 +372,30 @@ jobs:
             -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
             -kubernetes-version ${{ env.K8S_VERSION }} \
             /tmp/rendered-infra-cert-manager-prod.yaml
+
+      - name: Kubeconform — schema validation (infra/argo-rollouts/staging)
+        run: |
+          kubeconform \
+            -summary \
+            -verbose \
+            -strict \
+            -ignore-missing-schemas \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            -kubernetes-version ${{ env.K8S_VERSION }} \
+            /tmp/rendered-infra-argo-rollouts-staging.yaml
+
+      - name: Kubeconform — schema validation (infra/argo-rollouts/prod)
+        run: |
+          kubeconform \
+            -summary \
+            -verbose \
+            -strict \
+            -ignore-missing-schemas \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            -kubernetes-version ${{ env.K8S_VERSION }} \
+            /tmp/rendered-infra-argo-rollouts-prod.yaml
 
       - name: Kubeconform — schema validation (local-path-provisioner)
         run: |

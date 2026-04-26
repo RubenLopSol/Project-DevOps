@@ -1,13 +1,9 @@
-# PodDisruptionBudget — API (blue deployment)
+# PDB for the openpanel-api Rollout. Keeps at least one pod up during
+# node drains and rolling restarts. Selector matches both stable and canary
+# pods (they share app: openpanel-api) so it protects total capacity, not
+# a single revision.
 #
-# Guarantees at least 1 API pod remains available during voluntary disruptions
-# (node drains, cluster upgrades, rolling restarts).
-#
-# With 3 replicas in prod, minAvailable: 1 allows Kubernetes to evict up to
-# 2 pods at a time — fast enough for upgrades, safe enough for production.
-#
-# This is a prod-only resource. Dev runs 1 replica so a PDB would block
-# all maintenance operations on that single pod.
+# Prod-only: on a 1-node dev cluster minAvailable: 1 would block drains.
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
@@ -18,4 +14,3 @@ spec:
   selector:
     matchLabels:
       app: openpanel-api
-      version: blue
