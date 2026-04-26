@@ -166,22 +166,13 @@ grafana:
     hosts:
       - grafana.local
 
-  # Datasources: Prometheus + Loki + Tempo con correlación.
-  # `deleteDatasources` runs before `additionalDataSources` so we can change
-  # the UID on Loki/Tempo without leaving stale records (Grafana persists the
-  # first UID it sees, so a plain rename in YAML would not take effect).
-  deleteDatasources:
-    - name: Loki
-      orgId: 1
-    - name: Tempo
-      orgId: 1
+  # Datasources: Prometheus + Loki + Tempo con correlación
   additionalDataSources:
     - name: Loki
       type: loki
-      uid: loki
       access: proxy
       url: http://loki-gateway.observability.svc.cluster.local
-      editable: true
+      editable: false
       jsonData:
         derivedFields:
           - datasourceUid: tempo
@@ -194,7 +185,7 @@ grafana:
       uid: tempo
       access: proxy
       url: http://tempo.observability.svc.cluster.local:3100
-      editable: true
+      editable: false
       jsonData:
         tracesToLogs:
           datasourceUid: loki
