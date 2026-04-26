@@ -1,0 +1,175 @@
+{
+  "annotations": { "list": [] },
+  "description": "Cluster-level dashboard. Top row is the cluster summary, the rest is per-node detail. The bottom panel surfaces every alert defined for cluster/node concerns so you do not need to switch to the Alertmanager UI.",
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "tags": ["cluster", "node", "kubernetes"],
+  "title": "Cluster",
+  "uid": "cluster",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "weekStart": "",
+  "templating": {
+    "list": [
+      {
+        "name": "ds_prom",
+        "label": "Prometheus",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "selected": false, "text": "Prometheus", "value": "Prometheus" },
+        "hide": 0,
+        "refresh": 1
+      },
+      {
+        "name": "node",
+        "label": "Node",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+        "query": "label_values(kube_node_info, node)",
+        "current": { "selected": true, "text": "All", "value": "$__all" },
+        "includeAll": true,
+        "multi": true,
+        "refresh": 2,
+        "sort": 1
+      }
+    ]
+  },
+  "panels": [
+    { "type": "row", "id": 100, "title": "Cluster summary", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 } },
+
+    {
+      "type": "stat",
+      "id": 1,
+      "title": "Nodes Ready",
+      "description": "Nodes the cluster sees as Ready. If this drops, scheduling is constrained.",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "targets": [ { "expr": "sum(kube_node_status_condition{condition=\"Ready\",status=\"true\"})", "refId": "A" } ],
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "auto" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] }, "unit": "short" } }
+    },
+    {
+      "type": "stat",
+      "id": 2,
+      "title": "Pods Running",
+      "description": "Total pods in phase=Running across the cluster.",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "targets": [ { "expr": "sum(kube_pod_status_phase{phase=\"Running\"})", "refId": "A" } ],
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "auto" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null } ] }, "unit": "short" } }
+    },
+    {
+      "type": "stat",
+      "id": 3,
+      "title": "Cluster CPU used (%)",
+      "description": "Cluster-wide CPU usage vs allocatable. Above ~80% sustained means add nodes or trim limits.",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "targets": [ { "expr": "100 * sum(rate(container_cpu_usage_seconds_total{container!=\"\",container!=\"POD\"}[5m])) / sum(kube_node_status_allocatable{resource=\"cpu\"})", "refId": "A" } ],
+      "options": { "colorMode": "background", "graphMode": "area", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "auto" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 70 }, { "color": "red", "value": 85 } ] }, "unit": "percent", "min": 0, "max": 100 } }
+    },
+    {
+      "type": "stat",
+      "id": 4,
+      "title": "Cluster Memory used (%)",
+      "description": "Cluster-wide working-set memory vs allocatable. This is the figure Kubernetes uses for OOM decisions.",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "targets": [ { "expr": "100 * sum(container_memory_working_set_bytes{container!=\"\",container!=\"POD\"}) / sum(kube_node_status_allocatable{resource=\"memory\"})", "refId": "A" } ],
+      "options": { "colorMode": "background", "graphMode": "area", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "auto" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 70 }, { "color": "red", "value": 85 } ] }, "unit": "percent", "min": 0, "max": 100 } }
+    },
+
+    { "type": "row", "id": 101, "title": "Per-node detail", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 } },
+
+    {
+      "type": "timeseries",
+      "id": 5,
+      "title": "Node CPU usage (%)",
+      "description": "CPU usage per node. The KubeNodeNotReady / KubeCPUOvercommit alerts fire from this same data.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "targets": [ { "expr": "100 * (1 - avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\",instance=~\"$node.*\"}[5m])))", "legendFormat": "{{instance}}", "refId": "A" } ],
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10 }, "unit": "percent", "min": 0, "max": 100 } },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "lastNotNull"] }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "type": "timeseries",
+      "id": 6,
+      "title": "Node memory usage (%)",
+      "description": "Memory pressure per node. Drives the NodeMemoryHighUtilization alert.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "targets": [ { "expr": "100 * (1 - (node_memory_MemAvailable_bytes{instance=~\"$node.*\"} / node_memory_MemTotal_bytes{instance=~\"$node.*\"}))", "legendFormat": "{{instance}}", "refId": "A" } ],
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10 }, "unit": "percent", "min": 0, "max": 100 } },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "lastNotNull"] }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "type": "timeseries",
+      "id": 7,
+      "title": "Node disk usage (%) — root filesystem",
+      "description": "Root-fs fill per node. The NodeFilesystemAlmostOutOfSpace alert fires from this metric.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "targets": [ { "expr": "100 * (1 - node_filesystem_avail_bytes{mountpoint=\"/\",fstype!=\"tmpfs\",instance=~\"$node.*\"} / node_filesystem_size_bytes{mountpoint=\"/\",fstype!=\"tmpfs\",instance=~\"$node.*\"})", "legendFormat": "{{instance}}", "refId": "A" } ],
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10 }, "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 70 }, { "color": "red", "value": 85 } ] } } },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull"] }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "type": "timeseries",
+      "id": 8,
+      "title": "Node network I/O (bytes/s)",
+      "description": "Receive vs transmit per node. Useful when troubleshooting suspected network saturation.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "targets": [
+        { "expr": "sum by (instance) (rate(node_network_receive_bytes_total{device!~\"lo|veth.*|cali.*|cni.*|docker.*\",instance=~\"$node.*\"}[5m]))", "legendFormat": "{{instance}} rx", "refId": "A" },
+        { "expr": "sum by (instance) (rate(node_network_transmit_bytes_total{device!~\"lo|veth.*|cali.*|cni.*|docker.*\",instance=~\"$node.*\"}[5m]))", "legendFormat": "{{instance}} tx", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 5 }, "unit": "Bps" } },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "lastNotNull"] }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "type": "timeseries",
+      "id": 9,
+      "title": "Pod restarts by node (last 5m)",
+      "description": "Container restart rate grouped by node. Spikes here usually mean a node is unhealthy or evicting pods.",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 22 },
+      "datasource": { "type": "prometheus", "uid": "${ds_prom}" },
+      "targets": [
+        { "expr": "sum by (node) (increase(kube_pod_container_status_restarts_total[5m]) * on(pod, namespace) group_left(node) kube_pod_info{node=~\"$node\"})", "legendFormat": "{{node}}", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "bars", "fillOpacity": 50 }, "unit": "short" } },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+
+    { "type": "row", "id": 102, "title": "Active alerts (cluster + node)", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 30 } },
+
+    {
+      "type": "alertlist",
+      "id": 10,
+      "title": "Firing or pending alerts touching the cluster or nodes",
+      "description": "Live view of every alert defined that targets cluster, node, kubelet, or kube-state metrics. If something is wrong it should show up here.",
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 31 },
+      "options": {
+        "showOptions": "current",
+        "maxItems": 30,
+        "sortOrder": 3,
+        "dashboardAlerts": false,
+        "alertName": "",
+        "dashboardTitle": "",
+        "tags": [],
+        "stateFilter": { "firing": true, "pending": true, "noData": false, "normal": false, "error": true },
+        "alertInstanceLabelFilter": "{alertname=~\"KubeNode.*|KubePod.*|KubeletDown|KubeletTooManyPods|NodeFilesystem.*|NodeMemory.*|NodeNetwork.*|NodeCPU.*|KubeCPUOvercommit|KubeMemoryOvercommit|KubeAPIDown|KubeClientErrors|KubeVersionMismatch|HighMemoryUsage|TargetDown\"}"
+      }
+    }
+  ]
+}

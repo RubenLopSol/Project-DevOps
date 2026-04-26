@@ -201,13 +201,14 @@ additionalPrometheusRulesMap:
 # Grafana — disabled here, deployed as its own ArgoCD Application from
 # k8s/infrastructure/base/observability/grafana (grafana/grafana chart).
 #
-# forceDeployDashboards/Datasources keep KPS's bundled dashboard ConfigMaps
-# (kubernetes-cluster, etcd, etc.) deploying so the standalone Grafana
-# sidecar can still discover them by label.
+# `forceDeployDashboards: false` suppresses the chart's 24 bundled dashboard
+# ConfigMaps (kubernetes-*, etcd, alertmanager-overview, etc.). Only the
+# three repo-curated dashboards (cluster, openpanel, logs-traces) are
+# rendered as ConfigMaps via the standalone grafana kustomization.
 # ----------------------------------------------------------------------------
 grafana:
   enabled: false
-  forceDeployDashboards: true
+  forceDeployDashboards: false
 
 # ----------------------------------------------------------------------------
 # AlertManager — disabled here, deployed as its own ArgoCD Application from

@@ -23,3 +23,36 @@ helmCharts:
     namespace: observability
     includeCRDs: false
     valuesFile: values.yaml
+
+# ----------------------------------------------------------------------------
+# Dashboards — generated as ConfigMaps with the `grafana_dashboard: "1"`
+# label so the Grafana sidecar (configured in values.yaml) discovers them
+# automatically. Source JSON lives in grafana-dashboards/ at the repo root.
+# Folders in the Grafana UI come from the `grafana_folder` annotation.
+# ----------------------------------------------------------------------------
+namespace: observability
+
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    grafana_dashboard: "1"
+
+configMapGenerator:
+  - name: grafana-dashboard-cluster
+    files:
+      - cluster.json=../../../../../grafana-dashboards/cluster.json
+    options:
+      annotations:
+        grafana_folder: Cluster
+  - name: grafana-dashboard-openpanel
+    files:
+      - openpanel.json=../../../../../grafana-dashboards/openpanel.json
+    options:
+      annotations:
+        grafana_folder: OpenPanel
+  - name: grafana-dashboard-logs-traces
+    files:
+      - logs-traces.json=../../../../../grafana-dashboards/logs-traces.json
+    options:
+      annotations:
+        grafana_folder: Observability

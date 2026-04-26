@@ -93,80 +93,14 @@ sidecar:
     enabled: false
 
 # ----------------------------------------------------------------------------
-# Dashboard providers — file-based dashboards bundled at chart render time.
-# CLUSTER VIEW
-#   15760 — Kubernetes / Views / Global
-#   1860  — Node Exporter Full
-#   7249  — Kubernetes Cluster
-#   3119  — Kubernetes cluster monitoring
-# OPENPANEL VIEW
-#   11159 — Node.js prom-client RED metrics
-#   9628  — PostgreSQL Database
-#   11835 — Redis Dashboard
-#   14192 — ClickHouse Overview
+# Dashboards — only three, all maintained as JSON in `grafana-dashboards/`
+# at the repo root. The sidecar (configured above) discovers the matching
+# ConfigMaps by the `grafana_dashboard: "1"` label, so no in-chart
+# dashboards / dashboardProviders blocks are needed here.
+#   - cluster.json       (folder: Cluster)
+#   - openpanel.json     (folder: OpenPanel)
+#   - logs-traces.json   (folder: Observability)
 # ----------------------------------------------------------------------------
-dashboardProviders:
-  dashboardproviders.yaml:
-    apiVersion: 1
-    providers:
-      - name: cluster
-        orgId: 1
-        folder: "Cluster"
-        type: file
-        disableDeletion: false
-        editable: true
-        options:
-          path: /var/lib/grafana/dashboards/cluster
-      - name: openpanel
-        orgId: 1
-        folder: "OpenPanel"
-        type: file
-        disableDeletion: false
-        editable: true
-        options:
-          path: /var/lib/grafana/dashboards/openpanel
-
-dashboards:
-  cluster:
-    kubernetes-global:
-      gnetId: 15760
-      revision: 37
-      datasource:
-        - name: DS_PROMETHEUS
-          value: Prometheus
-    node-exporter-full:
-      gnetId: 1860
-      revision: 37
-      datasource:
-        - name: DS_PROMETHEUS
-          value: Prometheus
-    kubernetes-cluster:
-      gnetId: 7249
-      revision: 1
-      datasource: Prometheus
-    kubernetes-pods:
-      gnetId: 3119
-      revision: 2
-      datasource: Prometheus
-  openpanel:
-    openpanel-api-nodejs:
-      gnetId: 11159
-      revision: 1
-      datasource: Prometheus
-    postgres:
-      gnetId: 9628
-      revision: 7
-      datasource: Prometheus
-    redis:
-      gnetId: 11835
-      revision: 1
-      datasource: Prometheus
-    clickhouse:
-      gnetId: 14192
-      revision: 3
-      datasource:
-        - name: DS_PROMETHEUS
-          value: Prometheus
 
 # ----------------------------------------------------------------------------
 # ServiceMonitor — let Prometheus scrape Grafana's own /metrics.
