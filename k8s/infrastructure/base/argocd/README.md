@@ -1,305 +1,202 @@
-# ArgoCD — Base and Overlay Structure
+# ArgoCD
 
----
+ArgoCD is the GitOps controller. It watches this repository, renders the manifests under `k8s/`, and continuously reconciles the live cluster against them. Manual `kubectl apply` is reserved for exactly one bootstrap step; everything after that is a `git push`.
 
-## What is ArgoCD and how does it work?
-
-### The core idea
-
-ArgoCD is a **GitOps controller** that runs inside your Kubernetes cluster. Its job is simple:
-watch a Git repository, and continuously make the cluster look exactly like what Git says it should look like.
-
-Without ArgoCD you would manually run `kubectl apply` every time something changes.
-With ArgoCD, you commit to Git and the cluster updates itself automatically.
-
-```
-You commit YAML to Git
-        │
-        ▼
-ArgoCD detects the change (polls Git every 3 minutes, or via webhook)
-        │
-        ▼
-ArgoCD runs kustomize build (or helm template) to render the manifests
-        │
-        ▼
-ArgoCD compares rendered manifests against what is live in the cluster
-        │
-        ├── No difference → cluster is "Synced", nothing to do
-        │
-        └── Difference found → ArgoCD applies the changes automatically
-                               (because automated sync is enabled)
-```
-
-If someone manually changes something in the cluster (e.g. `kubectl edit deployment`),
-ArgoCD detects the drift and reverts it back to what Git says. This is `selfHeal: true`.
-
----
-
-### The three ArgoCD concepts this project uses
-
-#### 1. `AppProject` — the permission boundary
-
-Before ArgoCD can deploy anything, it needs to know what it is **allowed** to do.
-An `AppProject` defines the rules:
-
-- Which **Git repositories** Applications in this project can pull from
-- Which **namespaces** they can deploy resources into
-- Which **cluster-scoped resource types** (like `Namespace`, `ClusterRole`) they can create
-
-Think of it as a security fence. An Application that tries to deploy outside these rules
-is rejected by ArgoCD. This project has one AppProject named `openpanel`.
-
-```
-AppProject "openpanel"
-├── Allowed repos:    this Git repo, prometheus helm repo, grafana helm repo
-├── Allowed namespaces: openpanel, observability, backup, velero, sealed-secrets, kube-system
-└── Allowed cluster resources: Namespace, ClusterRole, CRD, WebhookConfiguration
-```
-
-#### 2. `Application` — the GitOps watcher
-
-An `Application` is the main ArgoCD resource. It connects a **Git path** to a **cluster destination**:
-
-```
-Application "minio"
-├── Source: Git repo → path: k8s/infrastructure/overlays/staging/minio
-│           (ArgoCD runs: kustomize build this path)
-└── Destination: cluster → namespace: backup
-    (ArgoCD applies the rendered manifests here)
-```
-
-Each application has a `syncPolicy` that controls:
-- `automated.prune: true` — delete resources that were removed from Git
-- `automated.selfHeal: true` — revert manual changes back to what Git says
-- `sync-wave` annotation — deployment order (see below)
-
-This project has 6 Applications, one per component:
-`namespaces` → `sealed-secrets` → `observability` + `minio` + `velero` → `openpanel`
-
-#### 3. Sync waves — deployment order
-
-ArgoCD deploys resources in waves. Wave N does not start until all resources in wave N-1
-are `Healthy`. This enforces the correct boot order:
-
-```
-Wave 0 → namespaces         (cluster namespaces must exist first)
-Wave 1 → sealed-secrets     (controller must be ready before secrets are needed)
-Wave 2 → observability      (infrastructure before app)
-Wave 2 → minio              (infrastructure before app)
-Wave 2 → velero             (infrastructure before app)
-Wave 3 → openpanel          (application deployed last, into a fully prepared cluster)
-```
-
----
-
-### The App of Apps pattern
-
-This project uses the **App of Apps** pattern. Instead of manually applying each
-`Application` CR with `kubectl apply`, there is one root Application called `bootstrap`
-that watches the directory containing all the other Application CRs.
-
-```
-You run once:
-  kubectl apply -f overlays/staging/argocd/bootstrap-app.yaml
-          │
-          ▼
-ArgoCD creates the "bootstrap" Application
-          │
-          ▼
-bootstrap watches: k8s/infrastructure/overlays/staging/argocd
-          │
-          ├── finds namespaces-app.yaml   → creates Application "namespaces"
-          ├── finds sealed-secrets-app.yaml → creates Application "sealed-secrets"
-          ├── finds observability-app.yaml  → creates Application "observability"
-          ├── finds minio-app.yaml          → creates Application "minio"
-          ├── finds velero-app.yaml         → creates Application "velero"
-          └── finds openpanel-app.yaml      → creates Application "openpanel"
-                    │
-                    ▼
-          Each Application then watches its own Git path
-          and deploys its own workload independently
-```
-
-After the single `kubectl apply` of `bootstrap-app.yaml`, you never need to run
-`kubectl apply` again for any Application. Adding a new component is just adding
-a new `*-app.yaml` file to Git — ArgoCD picks it up automatically.
-
----
-
-### How the three directories map to these concepts
-
-| Directory | ArgoCD concept | Applied how |
-|---|---|---|
-| `base/argocd/install/` | ArgoCD itself (the engine) | `install-argocd.sh` via kustomize build |
-| `base/argocd/projects/` | `AppProject` — permission boundary | Part of the overlay, synced by bootstrap app |
-| `base/argocd/applications/` | `Application` CRs — GitOps watchers | Part of the overlay, synced by bootstrap app |
-
-The `install/` directory is special: it is only used **once** at bootstrap time to install
-ArgoCD itself. After that, ArgoCD manages the `projects/` and `applications/` through GitOps
-— any change to those files in Git is picked up and applied automatically.
+This directory holds the three pieces that make that work: the chart that installs ArgoCD itself, the `AppProject` that scopes what ArgoCD is allowed to do, and the `Application` CRs that wire each platform component into GitOps.
 
 ---
 
 ## Directory layout
 
 ```
-k8s/infrastructure/
-├── base/argocd/
-│   ├── install/
-│   │   ├── kustomization.yaml   ← Helm chart definition (chart, version, repo, releaseName)
-│   │   └── values.yaml          ← Common Helm values shared by all environments
-│   ├── applications/
-│   │   ├── kustomization.yaml
-│   │   ├── namespaces-app.yaml
-│   │   ├── sealed-secrets-app.yaml
-│   │   ├── observability-app.yaml
-│   │   ├── minio-app.yaml
-│   │   ├── velero-app.yaml
-│   │   └── openpanel-app.yaml
-│   └── projects/
-│       ├── kustomization.yaml
-│       └── openpanel-project.yaml
-└── overlays/
-    ├── staging/argocd/
-    │   ├── kustomization.yaml      ← helmCharts re-declared + labels env=staging
-    │   ├── values.yaml             ← staging: argocd.local, small resources
-    │   ├── bootstrap-app.yaml      ← App of Apps root, applied once manually
-    │   └── patches/app-env.yaml    ← empty (base already points to staging)
-    └── prod/argocd/
-        ├── kustomization.yaml      ← helmCharts re-declared + labels env=prod + patches
-        ├── values.yaml             ← prod: real hostname, TLS, larger resources
-        ├── bootstrap-app.yaml      ← App of Apps root, applied once manually
-        └── patches/app-env.yaml    ← patches all Application paths staging → prod
+k8s/infrastructure/base/argocd/
+├── install/                             # ArgoCD itself, applied once at bootstrap
+│   ├── kustomization.yaml               #   helmCharts block — chart, version, releaseName
+│   ├── values.yaml                      #   common values (env overlays add their own on top)
+│   └── charts/                          #   vendored argo-cd 7.7.0 chart (offline-friendly)
+├── projects/
+│   ├── kustomization.yaml
+│   └── openpanel-project.yaml           # the AppProject — RBAC scope for every child Application
+└── applications/                        # the App of Apps — one Application CR per platform component
+    ├── kustomization.yaml
+    ├── namespaces-app.yaml
+    ├── local-path-provisioner-app.yaml
+    ├── sealed-secrets-app.yaml
+    ├── cert-manager-app.yaml
+    ├── argo-rollouts-app.yaml
+    ├── velero-operator-app.yaml
+    ├── prometheus-app.yaml
+    ├── minio-app.yaml
+    ├── velero-app.yaml
+    ├── loki-app.yaml
+    ├── promtail-app.yaml
+    ├── tempo-app.yaml
+    └── openpanel-app.yaml
 ```
 
 ---
 
-## `install/` — ArgoCD Helm chart
+## How ArgoCD comes up: the bootstrap
 
-**Purpose:** Defines the ArgoCD Helm chart itself: which chart, which version, which Helm repo,
-and which release name. Also holds the common values shared across all environments.
+ArgoCD has a chicken-and-egg problem — something has to install ArgoCD before ArgoCD can install itself. We solve it with a single one-shot script and a single one-shot `kubectl apply`:
 
-**Resources created when built (~50+ objects):**
+```bash
+make cluster-up ENV=staging        # wraps scripts/install-argocd.sh
+```
 
-| Kind | Name | Purpose |
-|---|---|---|
-| `Deployment` | `argocd-server` | ArgoCD UI and API server |
-| `Deployment` | `argocd-repo-server` | Clones Git repos, runs kustomize/helm |
-| `Deployment` | `argocd-application-controller` | Reconciles desired vs actual state |
-| `Deployment` | `argocd-dex-server` | SSO / OIDC provider |
-| `Deployment` | `argocd-notifications-controller` | Slack/email notifications |
-| `Service` | one per component | Internal cluster routing |
-| `Ingress` | `argocd-server` | Exposes the UI at `argocd.local` (staging) |
-| `ConfigMap` | `argocd-cm` | ArgoCD settings (`kustomize.buildOptions`) |
-| `ConfigMap` | `argocd-rbac-cm` | RBAC policy rules |
-| `Secret` | `argocd-secret` | Admin password, TLS certs |
-| `ServiceAccount` | one per component | Pod identity |
-| `ClusterRole` / `ClusterRoleBinding` | one per component | Cluster-wide permissions |
+`scripts/install-argocd.sh` does five things in order:
 
-**How to build (base values only):**
+1. Verifies `kustomize`, `kubectl` and `helm` are on `PATH` and at acceptable versions.
+2. `kustomize build --enable-helm k8s/infrastructure/overlays/<env>/argocd | kubectl apply -f -` — this installs the ArgoCD Helm chart, the `openpanel` `AppProject`, and the env-specific `bootstrap` Application CR.
+3. Waits for the `argocd-server` Deployment to roll out.
+4. Prints the auto-generated initial admin password.
+5. Returns. From this moment on, every other change is a git commit.
+
+The `bootstrap` Application points at `overlays/<env>/argocd/`, which is a Kustomize directory whose `resources:` list pulls in `base/argocd/applications/`. Reconciling `bootstrap` therefore reconciles every child Application. That is the **App of Apps** pattern.
+
+A side effect that is worth calling out: the `argocd` Application itself is in the App of Apps, so once bootstrap is done, ArgoCD upgrades *itself* through GitOps too. Bumping the chart version is a regular PR.
+
+---
+
+## `install/` — ArgoCD itself
+
+Chart: `argoproj/argo-cd` 7.7.0, release name `argocd`, namespace `argocd`. The chart is vendored under `install/charts/argo-cd-7.7.0/` so cluster bring-up does not depend on the upstream Helm repo being reachable at apply time.
+
+The chart renders ~50 objects — `argocd-server`, `argocd-repo-server`, `argocd-application-controller` (the reconciler), `argocd-dex-server` (SSO), `argocd-notifications-controller`, plus the usual ConfigMaps (`argocd-cm`, `argocd-rbac-cm`), the admin Secret (`argocd-secret`), and the Ingress that exposes the UI.
+
+Build it standalone (useful for `kustomize build` lint/CI checks against base values only):
+
 ```bash
 kustomize build --enable-helm k8s/infrastructure/base/argocd/install
 ```
 
----
-
-## `projects/` — AppProject (RBAC boundary)
-
-**Purpose:** Defines the `AppProject` CRD — an RBAC scope that limits what ArgoCD
-Applications belonging to this project are allowed to do. Without it, ArgoCD rejects
-any Application that tries to create cluster-scoped resources (Namespaces, CRDs, etc.).
-
-**Resources created:**
-
-| Kind | Name | What it controls |
-|---|---|---|
-| `AppProject` | `openpanel` | Allowed source repos, destination namespaces, cluster resource types |
-
-The `openpanel` project declares:
-- **Source repos:** this Git repository + Prometheus community + Grafana Helm repos
-- **Destination namespaces:** `openpanel`, `observability`, `backup`, `velero`, `sealed-secrets`, `kube-system`
-- **Cluster-scoped resources allowed:** `Namespace`, `ClusterRole`, `ClusterRoleBinding`, `CustomResourceDefinition`, `MutatingWebhookConfiguration`, `ValidatingWebhookConfiguration`
+In practice always go through an overlay. The base values are deliberately incomplete on hostname / TLS / resources — those have to come from `overlays/staging/argocd/values.yaml` or `overlays/prod/argocd/values.yaml`.
 
 ---
 
-## `applications/` — Application CRs (App of Apps)
+## `projects/` — the `openpanel` AppProject
 
-**Purpose:** Defines the 6 `Application` CRDs — the GitOps watchers. Each one tells ArgoCD
-which Git path to watch and where in the cluster to apply the rendered manifests.
-These are **not** the workloads themselves — they are the instructions ArgoCD follows
-to continuously reconcile each workload.
+`AppProject` is ArgoCD's RBAC primitive. Every child `Application` declares `spec.project: openpanel`, which means it inherits the rules in this file. An Application that tries to step outside them is rejected by the `argocd-application-controller`, not by Kubernetes — the manifest never even reaches the API server.
 
-**Resources created:**
+The project allows:
 
-| Application | Sync wave | Git path watched (staging default) | Deploys to |
-|---|---|---|---|
-| `namespaces` | 0 | `k8s/infrastructure/base/namespaces` | cluster-wide |
-| `sealed-secrets` | 1 | `k8s/infrastructure/overlays/staging/sealed-secrets` | `sealed-secrets` |
-| `observability` | 2 | `k8s/infrastructure/overlays/staging/observability` | `observability` |
-| `minio` | 2 | `k8s/infrastructure/overlays/staging/minio` | `backup` |
-| `velero` | 2 | `k8s/infrastructure/overlays/staging/velero` | `velero` |
-| `openpanel` | 3 | `k8s/apps/overlays/staging` | `openpanel` |
+| Setting | Value |
+|---------|-------|
+| Source repos | this Git repo, plus the upstream Helm repos for prometheus-community, grafana, sealed-secrets, argoproj, vmware-tanzu (Velero), jetstack (cert-manager) |
+| Destination namespaces | `openpanel`, `observability`, `backup`, `velero`, `sealed-secrets`, `cert-manager`, `argo-rollouts`, `argocd`, `kube-system`, `local-path-storage` |
+| Cluster-scoped kinds | `Namespace`, `ClusterRole`, `ClusterRoleBinding`, `CustomResourceDefinition`, `MutatingWebhookConfiguration`, `ValidatingWebhookConfiguration`, `PodSecurityPolicy`, `cert-manager.io/ClusterIssuer` |
+| Namespaced kinds (whitelist) | core (`""`), `apps`, `networking.k8s.io`, `batch`, `velero.io`, `rbac.authorization.k8s.io`, `monitoring.coreos.com`, `policy`, `autoscaling`, `bitnami.com` (SealedSecret), `cert-manager.io`, `argoproj.io` (Rollout, AnalysisTemplate, Experiment) |
 
-**Sync wave ordering** ensures ArgoCD deploys in the correct sequence:
-namespaces → sealed-secrets → infrastructure (observability, minio, velero) → application.
-ArgoCD waits for all resources in wave N to be `Healthy` before starting wave N+1.
+The whitelist approach is intentional: every group/kind has to be explicitly added, so a chart that suddenly tries to install something exotic fails closed at sync time.
 
-**Paths are never hardcoded in base.** Every env-specific path is set to `PLACEHOLDER`
-in the base and overridden by each overlay's `patches/app-env.yaml`. Both staging and
-prod explicitly declare their own paths — no environment is a hidden default.
+The `bootstrap` Application is the one exception — it is in `project: default` because it is the entry point and exists before the `openpanel` project does.
 
 ---
 
-## Why the `helmCharts` block is repeated in base and overlay
+## `applications/` — App of Apps
 
-This is a **Kustomize limitation**. Kustomize cannot merge or extend a `helmCharts`
-block from a base into an overlay — there is no strategic merge patch for `helmCharts`.
-The only way to add overlay-specific values on top of base values is to re-declare the
-full chart spec in the overlay and point to both values files:
+One Application per platform component, all owned by the `bootstrap` Application via the env overlay. Each carries an `argocd.argoproj.io/sync-wave` annotation that ArgoCD honours: every Application in wave *n* must be `Healthy` + `Synced` before any wave *n+1* sync starts.
 
-```
-base/install/kustomization.yaml              overlays/staging/kustomization.yaml
-────────────────────────────────             ──────────────────────────────────────────
-helmCharts:                                  helmCharts:
-  - name: argo-cd           ← same            - name: argo-cd           (re-declared)
-    repo: argoproj/...      ← same              repo: argoproj/...
-    version: "7.7.0"        ← same              version: "7.7.0"
-    releaseName: argocd     ← same              releaseName: argocd
-    namespace: argocd       ← same              namespace: argocd
-    valuesFile: values.yaml                     valuesFile: ../../../base/argocd/install/values.yaml
-                                                additionalValuesFiles:
-                                                  - values.yaml         ← staging adds this
-```
+| Wave | Application | Watches (staging path) | Deploys into | Why this wave |
+|:----:|-------------|------------------------|--------------|---------------|
+| **0** | `namespaces` | `k8s/infrastructure/base/namespaces` | cluster-wide | Namespaces have to exist before any later resource references them. |
+| **0** | `local-path-provisioner` | `overlays/staging/local-path-provisioner` | `local-path-storage` | StorageClass must exist before any PVC can bind. |
+| **1** | `sealed-secrets` | `overlays/staging/sealed-secrets` | `sealed-secrets` | Controller + the SealedSecret CRs that later workloads consume. |
+| **1** | `cert-manager` | `overlays/staging/cert-manager` | `cert-manager` | Installs cert-manager CRDs (`Certificate`, `ClusterIssuer`). |
+| **1** | `argo-rollouts` | `overlays/staging/argo-rollouts` | `argo-rollouts` | Installs the `Rollout` CRD that the openpanel-api workload uses. |
+| **1** | `velero-operator` | `overlays/staging/velero-operator` | `velero` | Installs Velero CRDs (`Backup`, `BackupStorageLocation`, `Schedule`). |
+| **2** | `prometheus` | `overlays/staging/observability/kube-prometheus-stack` | `observability` | Needs the namespace and the `local-path` StorageClass. |
+| **2** | `minio` | `overlays/staging/minio` | `backup` | Object store that backs Velero's default `BackupStorageLocation`. |
+| **2** | `velero` | `overlays/staging/velero` | `velero` | Reconciles `BackupStorageLocation` + `Schedule` against the wave-1 CRDs. |
+| **3** | `loki` | `overlays/staging/observability/loki` | `observability` | Logs side of observability — brought up before the app so first-run logs are captured. |
+| **3** | `promtail` | `overlays/staging/observability/promtail` | `observability` | Per-node DaemonSet that ships container logs to Loki. |
+| **3** | `tempo` | `overlays/staging/observability/tempo` | `observability` | Trace store. Receives OTLP from the api/worker once they start. |
+| **4** | `openpanel` | `k8s/apps/overlays/staging` | `openpanel` | Application. Everything it depends on is now Healthy. |
 
-Helm merges the two values files in order: **base first, overlay second**.
-Overlay values win on any conflict (e.g. `server.resources.requests.cpu`).
-
-The base `kustomization.yaml` exists so the chart can be built standalone with only
-base values — useful for validation and local testing. In practice, always deploy via
-the environment overlay.
-
-The same pattern applies to every chart in this project:
-`kube-prometheus-stack`, `loki`, `promtail`, `tempo` all repeat their chart spec
-in the staging/prod overlays for exactly the same reason.
-
----
-
-## How to deploy
+Read the same table off the cluster directly:
 
 ```bash
-# Staging
-./scripts/install-argocd.sh staging
-
-# Prod
-./scripts/install-argocd.sh prod
+kubectl get applications -n argocd \
+  -o custom-columns=NAME:.metadata.name,WAVE:.metadata.annotations.argocd\.argoproj\.io/sync-wave,PATH:.spec.source.path
 ```
 
-The script:
-1. Checks prerequisites (`kustomize`, `kubectl`, minimum versions)
-2. Renders the overlay: `kustomize build --enable-helm overlays/<ENV>/argocd | kubectl apply`
-3. Waits for `argocd-server` rollout
-4. Prints the initial admin password
-5. Applies `bootstrap-app.yaml` — the single manual step that hands control to ArgoCD
+### Paths are never hardcoded in `base/`
 
-After step 5, ArgoCD watches its own overlay and manages all Application CRs automatically.
-No further `kubectl apply` commands are needed — Git commits drive everything.
+In `base/argocd/applications/*.yaml` you will see `path: PLACEHOLDER`. That is deliberate. Each overlay's `patches/app-env.yaml` does an exact-string replacement to point every Application at the matching env directory (`overlays/staging/...` or `overlays/prod/...`). Neither environment is a hidden default — both have to opt in.
+
+### Sync policy on every child
+
+```yaml
+syncPolicy:
+  automated:
+    prune: true        # (false on argo-rollouts and a couple of others — see below)
+    selfHeal: true
+    allowEmpty: false
+  syncOptions:
+    - ServerSideApply=true
+    - CreateNamespace=false
+```
+
+Two notable exceptions:
+
+- `argo-rollouts-app.yaml` sets `prune: false`. If we let ArgoCD prune the Argo Rollouts controller, it would also delete the `Rollout` CRD, which would in turn cascade-delete every Rollout resource (including `openpanel-api`). The trade is that an explicit removal of the chart from git would not be honoured automatically — you would have to delete the controller by hand. That is the right trade for a CRD-bearing controller.
+- The same `prune: false` applies to other CRD-bearing charts where appropriate (cert-manager, sealed-secrets, velero-operator). See each `*-app.yaml` for the per-Application setting.
+
+---
+
+## Why the `helmCharts` block is restated in every overlay
+
+Kustomize cannot strategic-merge a `helmCharts` block from a base into an overlay. There is no patch type for it. The only way to layer overlay-specific Helm values on top of base values is to re-declare the entire chart spec in the overlay and point both files into it:
+
+```text
+base/argocd/install/kustomization.yaml          overlays/staging/argocd/kustomization.yaml
+─────────────────────────────────────────       ───────────────────────────────────────────────
+helmCharts:                                     helmCharts:
+  - name: argo-cd                                 - name: argo-cd                       (re-declared)
+    repo: argoproj/argo-helm                        repo: argoproj/argo-helm
+    version: "7.7.0"                                version: "7.7.0"
+    releaseName: argocd                             releaseName: argocd
+    namespace: argocd                               namespace: argocd
+    valuesFile: values.yaml                         valuesFile: ../../../base/argocd/install/values.yaml
+                                                    additionalValuesFiles:
+                                                      - values.yaml                    (overlay's own values)
+```
+
+Helm merges the two files in order — base first, overlay second, so overlay wins on any conflict (`server.resources.requests.cpu`, `server.ingress.hosts[0]`, etc.). The values still live in one place per environment; only the chart declaration is duplicated.
+
+The same pattern applies to every chart in this project (`kube-prometheus-stack`, `loki`, `promtail`, `tempo`, `cert-manager`, `argo-rollouts`, `sealed-secrets`, `velero-operator`). It is repetitive, but it is the only way Kustomize + Helm interoperate cleanly.
+
+---
+
+## Operational notes
+
+**Watch the platform converge after `make cluster-up`:**
+
+```bash
+kubectl get applications -n argocd -w
+```
+
+You will see 14 Applications progress through `OutOfSync` → `Synced`/`Healthy` in wave order. Wave 4 (openpanel) is the last to flip; if it stays `Progressing` the issue is almost always a SealedSecret that cannot be decrypted (see [`base/sealed-secrets/README.md`](../sealed-secrets/README.md)).
+
+**Force a re-sync without a git push:**
+
+```bash
+argocd app sync openpanel --prune
+```
+
+**Diff the live cluster against git:**
+
+```bash
+argocd app diff openpanel
+```
+
+**Open the UI:**
+
+```bash
+# Staging — added to /etc/hosts by scripts/setup-minikube.sh
+open http://argocd.local
+
+# Initial admin password (rotated to a real Secret in prod)
+kubectl -n argocd get secret argocd-initial-admin-secret \
+  -o jsonpath='{.data.password}' | base64 -d
+```

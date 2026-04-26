@@ -31,6 +31,7 @@ spec:
           ports:
             - containerPort: 3000
               name: http
+              protocol: TCP
           envFrom:
             - configMapRef:
                 name: openpanel-config

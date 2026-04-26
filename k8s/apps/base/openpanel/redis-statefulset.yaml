@@ -57,6 +57,7 @@ spec:
           ports:
             - containerPort: 9121
               name: metrics
+              protocol: TCP
           env:
             - name: REDIS_ADDR
               value: "redis://localhost:6379"
@@ -84,6 +85,7 @@ spec:
           ports:
             - containerPort: 6379
               name: redis
+              protocol: TCP
           env:
             - name: REDIS_PASSWORD
               valueFrom:
