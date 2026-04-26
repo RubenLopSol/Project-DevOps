@@ -15,6 +15,12 @@ configs:
     # observability stack (kube-prometheus-stack, loki, tempo, promtail) all
     # render at once. 4 keeps memory growth bounded.
     reposerver.parallelism.limit: "4"
+    # Enable server-side diffing for the application-controller. Required for
+    # per-Application `ServerSideDiff=true` syncOption to take effect (it's a
+    # feature gate, not an opt-in). Without this, Helm-rendered StatefulSets
+    # show permanent OutOfSync drift from API-server default-value injection
+    # (e.g. minReadySeconds: 0 dropped on store), causing tight self-heal loops.
+    controller.diff.server.side: "true"
   cm:
     # Pass --enable-helm to every kustomize build ArgoCD runs.
     # Required for helmChartInflationGenerator used in observability,
