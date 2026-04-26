@@ -33,7 +33,14 @@ labels:
     includeSelectors: false
 
 patches:
-  # - path: patches/api-rollout.yaml
+  # JSON 6902 patch: needs an explicit target since the patch file has no
+  # apiVersion/kind/name of its own.
+  - target:
+      group: argoproj.io
+      version: v1alpha1
+      kind: Rollout
+      name: openpanel-api
+    path: patches/api-rollout.yaml
   - path: patches/start.yaml
   - path: patches/worker.yaml
   - path: patches/postgres-storage.yaml

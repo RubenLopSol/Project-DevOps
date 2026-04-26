@@ -57,3 +57,13 @@ metadata:
   name: cert-manager
   labels:
     app.kubernetes.io/part-of: cert-manager
+---
+# argo-rollouts: controller + dashboard live here. Rollout and Analysis* CRs
+# sit in their target namespaces (e.g. openpanel); the controller watches
+# across namespaces and patches their ReplicaSets and Service selectors.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argo-rollouts
+  labels:
+    app.kubernetes.io/part-of: argo-rollouts

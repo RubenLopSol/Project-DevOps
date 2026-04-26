@@ -1,0 +1,22 @@
+# Staging overlay for argo-rollouts. Same chart as base, plus an Ingress
+# so the dashboard is reachable at http://rollouts.local during local testing.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+helmCharts:
+  - name: argo-rollouts
+    repo: https://argoproj.github.io/argo-helm
+    version: 2.39.5
+    releaseName: argo-rollouts
+    namespace: argo-rollouts
+    valuesFile: values.yaml
+    includeCRDs: true
+
+commonAnnotations:
+  environment: staging
+  managed-by: kustomize
+
+labels:
+  - pairs:
+      env: staging
+    includeSelectors: false

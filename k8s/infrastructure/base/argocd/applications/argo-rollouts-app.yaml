@@ -1,0 +1,41 @@
+# Sync wave 1: controller + CRDs + dashboard. Must come up before openpanel
+# (wave 4), which references the Rollout CRD installed here.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argo-rollouts
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: openpanel
+  source:
+    repoURL: https://github.com/RubenLopSol/Project-DevOps.git
+    targetRevision: main
+    # Set by overlays/*/argocd/patches/app-env.yaml — never hardcoded here
+    path: PLACEHOLDER
+    kustomize: {}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argo-rollouts
+  syncPolicy:
+    automated:
+      # prune: false so ArgoCD never auto-deletes the controller (which would
+      # take the Rollout CRD with it).
+      prune: false
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      # CRDs are created in the same sync; skip dry-run so the Rollout CR
+      # doesn't fail validation against a CRD that isn't Established yet.
+      - ServerSideApply=true
+      - SkipDryRunOnMissingResource=true
+      - CreateNamespace=false
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
