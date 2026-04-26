@@ -1,24 +1,39 @@
-apiVersion: apps/v1
-kind: Deployment
+# Argo Rollouts canary for openpanel-api.
+# Image is rewritten by .github/workflows/cd-update-tags.yml on every push.
+#
+# Rollback:  kubectl argo rollouts abort   openpanel-api -n openpanel
+# Promote:   kubectl argo rollouts promote openpanel-api -n openpanel
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
 metadata:
-  name: openpanel-api-blue
+  name: openpanel-api
   namespace: openpanel
   labels:
     app: openpanel-api
-    version: blue
-  annotations:
-    argocd.argoproj.io/sync-wave: "10"
 spec:
   replicas: 2
+  revisionHistoryLimit: 3
   selector:
     matchLabels:
       app: openpanel-api
-      version: blue
+  strategy:
+    canary:
+      stableService: openpanel-api
+      canaryService: openpanel-api-canary
+      maxSurge: 1
+      maxUnavailable: 0
+      steps:
+        - setWeight: 25
+        - pause: { duration: 30s }
+        - setWeight: 50
+        - pause: { duration: 60s }
+        - setWeight: 100
   template:
     metadata:
       labels:
+        # No version label here. The Rollout controller adds
+        # rollouts-pod-template-hash and the Services pick it up.
         app: openpanel-api
-        version: blue
       annotations:
         prometheus.io/scrape: "false"
     spec:
@@ -26,8 +41,6 @@ spec:
         runAsNonRoot: true
         runAsUser: 1001
         fsGroup: 1001
-      # Pin to the app node group — keeps openpanel isolated from observability workloads.
-      # Node is labelled workload=app by scripts/setup-minikube.sh.
       nodeSelector:
         workload: app
       containers:
@@ -72,6 +85,20 @@ spec:
                 secretKeyRef:
                   name: openpanel-secrets
                   key: DATABASE_URL_DIRECT
+            - name: NODE_OPTIONS
+              value: "--require @opentelemetry/auto-instrumentations-node/register"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://tempo.observability.svc.cluster.local:4318"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "http/protobuf"
+            - name: OTEL_SERVICE_NAME
+              value: "openpanel-api"
+            # OTEL_RESOURCE_ATTRIBUTES (deployment.environment=...) is added by
+            # each overlay so the env tag is always correct per cluster.
+            - name: OTEL_TRACES_SAMPLER
+              value: "always_on"
+            - name: OTEL_LOG_LEVEL
+              value: "info"
           resources:
             requests:
               cpu: 250m

@@ -1,18 +1,10 @@
-# ---------------------------------------------------------------------------
-# PROD overlay — production cluster
+# Prod overlay. Adds a PDB and patches: API Rollout to 3 replicas, worker
+# to 2, ingress to a real domain + TLS, configmap to prod URLs.
 #
-# Inherits everything from base and applies:
-#   patches/api-blue.yaml    : 3 replicas (base has 2)
-#   patches/worker.yaml      : 2 replicas (base has 1)
-#   patches/ingress.yaml     : TLS + real domain names (requires cert-manager)
-#   patches/configmap.yaml   : prod URLs replacing cluster-internal defaults
-#   resources/pdb.yaml       : PodDisruptionBudget — keeps ≥1 API pod up during drains
-#
-# Before deploying to prod:
-#   1. Install cert-manager and create a ClusterIssuer named letsencrypt-prod
-#   2. Update domain names in patches/ingress.yaml and patches/configmap.yaml
-#   3. Ensure secrets are resealed with the prod cluster's SealedSecrets key
-# ---------------------------------------------------------------------------
+# Before pointing this at a real prod cluster:
+#   - cert-manager ClusterIssuer 'letsencrypt-prod' must exist
+#   - replace placeholder domains in patches/ingress.yaml + configmap.yaml
+#   - reseal secrets against the prod keypair (staging keys won't work)
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -30,7 +22,14 @@ labels:
     includeSelectors: false
 
 patches:
-  - path: patches/api-blue.yaml
+  # JSON 6902 patch: needs an explicit target since the patch file has no
+  # apiVersion/kind/name of its own.
+  - target:
+      group: argoproj.io
+      version: v1alpha1
+      kind: Rollout
+      name: openpanel-api
+    path: patches/api-rollout.yaml
   - path: patches/worker.yaml
   - path: patches/configmap.yaml
   - path: patches/ingress.yaml

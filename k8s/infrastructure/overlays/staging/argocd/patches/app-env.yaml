@@ -25,6 +25,16 @@ spec:
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
+  name: argo-rollouts
+  namespace: argocd
+spec:
+  source:
+    targetRevision: main
+    path: k8s/infrastructure/overlays/staging/argo-rollouts
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
   name: prometheus
   namespace: argocd
 spec:

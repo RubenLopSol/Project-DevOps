@@ -1,7 +1,10 @@
+# Preview Service for the canary ReplicaSet. Argo Rollouts patches the
+# selector with rollouts-pod-template-hash at runtime so it pins to the
+# new revision while openpanel-api keeps serving the stable one.
 apiVersion: v1
 kind: Service
 metadata:
-  name: openpanel-api
+  name: openpanel-api-canary
   namespace: openpanel
   labels:
     app: openpanel-api

@@ -1,0 +1,12 @@
+# Staging overrides on top of base/argo-rollouts/values.yaml.
+# Only the dashboard ingress differs here.
+
+dashboard:
+  enabled: true
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - rollouts.local
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "false"
