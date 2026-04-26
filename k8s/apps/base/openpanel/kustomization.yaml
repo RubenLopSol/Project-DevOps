@@ -1,8 +1,8 @@
 # =============================================================================
 # Base — OpenPanel application layer
 #
-# Defines all resources for the OpenPanel stack: API (Argo Rollouts canary),
-# Dashboard, Worker, PostgreSQL, ClickHouse, Redis, Ingress, NetworkPolicies.
+# Defines all resources for the OpenPanel stack: API (blue/green), Dashboard,
+# Worker, PostgreSQL, ClickHouse, Redis, Ingress, and NetworkPolicies.
 # Environment-specific tuning (replicas, resources, TLS) is applied via
 # overlays/staging and overlays/prod.
 # =============================================================================
@@ -14,12 +14,10 @@ namespace: openpanel
 resources:
   # Config
   - configmap.yaml
-  # API — Argo Rollouts canary (replaces api-deployment-blue + api-deployment-green)
-  # The old blue/green Deployment files are kept on disk for reference but no
-  # longer applied. Delete them after the cutover succeeds.
-  - api-rollout.yaml
+  # API (Blue-Green)
+  - api-deployment-blue.yaml
+  - api-deployment-green.yaml
   - api-service.yaml
-  - api-canary-service.yaml
   # Dashboard
   - start-deployment.yaml
   - start-service.yaml
