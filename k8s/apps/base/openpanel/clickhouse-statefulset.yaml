@@ -31,10 +31,13 @@ spec:
           ports:
             - containerPort: 8123
               name: http
+              protocol: TCP
             - containerPort: 9000
               name: native
+              protocol: TCP
             - containerPort: 9363
               name: metrics
+              protocol: TCP
           env:
             - name: CLICKHOUSE_USER
               valueFrom:

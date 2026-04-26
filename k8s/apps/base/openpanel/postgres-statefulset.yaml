@@ -50,6 +50,7 @@ spec:
           ports:
             - containerPort: 9187
               name: metrics
+              protocol: TCP
           env:
             - name: DATA_SOURCE_USER
               valueFrom:
@@ -78,6 +79,7 @@ spec:
           ports:
             - containerPort: 5432
               name: postgres
+              protocol: TCP
           env:
             - name: POSTGRES_USER
               valueFrom:

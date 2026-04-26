@@ -21,12 +21,20 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: observability
+  # The upstream tempo chart omits `protocol: TCP` on TCP container ports.
+  # ServerSideApply uses (name, protocol) as the composite key, so SSA can't
+  # diff them. We stick with client-side apply (no ServerSideApply syncOption)
+  # and ignore the immutable volumeClaimTemplates field, which Kubernetes
+  # forbids changing once the StatefulSet exists.
+  ignoreDifferences:
+    - group: apps
+      kind: StatefulSet
+      jsonPointers:
+        - /spec/volumeClaimTemplates
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
-    syncOptions:
-      - ServerSideApply=true
     retry:
       limit: 5
       backoff:
