@@ -1,0 +1,17 @@
+# =============================================================================
+# Grafana — STAGING overlay
+# =============================================================================
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+helmCharts:
+  - name: grafana
+    repo: https://grafana.github.io/helm-charts
+    version: "8.5.2"
+    releaseName: grafana
+    namespace: observability
+    includeCRDs: false
+    valuesFile: ../../../../base/observability/grafana/values.yaml
+    additionalValuesFiles:
+      - values.yaml

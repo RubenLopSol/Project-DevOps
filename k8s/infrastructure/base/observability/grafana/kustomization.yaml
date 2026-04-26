@@ -1,0 +1,25 @@
+# =============================================================================
+# Grafana — base chart definition
+#
+# Chart:   grafana/grafana
+# Version: 8.5.2
+#
+# Standalone deploy (base values only):
+#   kustomize build --enable-helm k8s/infrastructure/base/observability/grafana | kubectl apply -f -
+#
+# In practice, deploy via the environment overlay which merges base values
+# with environment-specific overrides:
+#   kustomize build --enable-helm k8s/infrastructure/overlays/staging/observability/grafana
+# =============================================================================
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+helmCharts:
+  - name: grafana
+    repo: https://grafana.github.io/helm-charts
+    version: "8.5.2"
+    releaseName: grafana
+    namespace: observability
+    includeCRDs: false
+    valuesFile: values.yaml

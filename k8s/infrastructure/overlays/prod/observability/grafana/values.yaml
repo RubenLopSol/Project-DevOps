@@ -1,0 +1,22 @@
+# =============================================================================
+# Grafana — PROD overrides.
+# Merged on top of base/observability/grafana/values.yaml.
+# =============================================================================
+
+replicas: 2
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 512Mi
+
+ingress:
+  hosts:
+    - grafana.yourdomain.com   # replace with real domain
+  tls:
+    - secretName: grafana-tls
+      hosts:
+        - grafana.yourdomain.com

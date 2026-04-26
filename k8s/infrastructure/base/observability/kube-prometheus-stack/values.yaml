@@ -1,6 +1,12 @@
 # =============================================================================
 # kube-prometheus-stack — Helm values
-# Incluye: Prometheus + Grafana + AlertManager + Node Exporter + kube-state-metrics
+#
+# This release now ships ONLY: prometheus-operator + CRDs + Prometheus +
+# node-exporter + kube-state-metrics. Grafana and Alertmanager are deployed
+# as their own ArgoCD Applications from sibling charts:
+#   k8s/infrastructure/base/observability/grafana
+#   k8s/infrastructure/base/observability/alertmanager
+#
 # Chart: prometheus-community/kube-prometheus-stack
 # =============================================================================
 
@@ -15,8 +21,6 @@ prometheus:
       - prometheus.local
   prometheusSpec:
     retention: 15d
-    # Pin Prometheus to the observability node group.
-    # Node is labelled workload=observability by scripts/setup-minikube.sh.
     nodeSelector:
       workload: observability
     resources:
@@ -27,7 +31,16 @@ prometheus:
         cpu: "1"
         memory: 1Gi
 
-    # Scrape configs personalizados para OpenPanel
+    # Route alerts to the standalone alertmanager Application (sibling chart).
+    # The prometheus-community/alertmanager chart creates a Service named
+    # `alertmanager` on port `http` (9093) in the observability namespace.
+    alerting:
+      alertmanagers:
+        - namespace: observability
+          name: alertmanager
+          port: http
+          pathPrefix: /
+
     additionalScrapeConfigs:
       - job_name: "kubernetes-pods"
         kubernetes_sd_configs:
@@ -139,201 +152,70 @@ additionalPrometheusRulesMap:
               summary: "Redis is unreachable"
               description: "Redis has been unreachable for more than 2 minutes. Tracking events cannot be queued and the worker has nothing to process."
 
+  # Self-monitoring for the standalone Alertmanager Application. Replaces the
+  # kube-prometheus-stack-bundled `alertmanager.rules` group (disabled below
+  # via defaultRules.rules.alertmanager). job="alertmanager" matches the
+  # ServiceMonitor created by k8s/infrastructure/base/observability/alertmanager.
+  alertmanager-self:
+    groups:
+      - name: alertmanager-self
+        rules:
+          - alert: AlertmanagerDown
+            expr: absent(up{job="alertmanager",namespace="observability"} == 1)
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Alertmanager is down"
+              description: "No `alertmanager` target in observability has been up for more than 5 minutes — alerts are being silently dropped."
+          - alert: AlertmanagerFailedReload
+            expr: max_over_time(alertmanager_config_last_reload_successful{job="alertmanager"}[5m]) == 0
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Alertmanager config reload failed"
+              description: "Reloading the Alertmanager configuration has failed for {{ $labels.namespace }}/{{ $labels.pod }}."
+          - alert: AlertmanagerNotificationFailures
+            expr: rate(alertmanager_notifications_failed_total{job="alertmanager"}[5m]) > 0
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Alertmanager is failing to send notifications"
+              description: "Integration {{ $labels.integration }} is failing for {{ $labels.namespace }}/{{ $labels.pod }}."
+
 # ----------------------------------------------------------------------------
-# Grafana
+# Grafana — disabled here, deployed as its own ArgoCD Application from
+# k8s/infrastructure/base/observability/grafana (grafana/grafana chart).
+#
+# forceDeployDashboards/Datasources keep KPS's bundled dashboard ConfigMaps
+# (kubernetes-cluster, etcd, etc.) deploying so the standalone Grafana
+# sidecar can still discover them by label.
 # ----------------------------------------------------------------------------
 grafana:
-  enabled: true
-  admin:
-    existingSecret: grafana-admin-credentials
-    userKey: admin-user
-    passwordKey: admin-password
-
-  nodeSelector:
-    workload: observability
-
-  resources:
-    requests:
-      cpu: 100m
-      memory: 128Mi
-    limits:
-      cpu: 200m
-      memory: 256Mi
-
-  ingress:
-    enabled: true
-    ingressClassName: nginx
-    hosts:
-      - grafana.local
-
-  # Datasources: Prometheus + Loki + Tempo con correlación
-  additionalDataSources:
-    - name: Loki
-      type: loki
-      access: proxy
-      url: http://loki-gateway.observability.svc.cluster.local
-      editable: false
-      jsonData:
-        derivedFields:
-          - datasourceUid: tempo
-            matcherRegex: "traceID=(\\w+)"
-            name: TraceID
-            url: "$${__value.raw}"
-
-    - name: Tempo
-      type: tempo
-      uid: tempo
-      access: proxy
-      url: http://tempo.observability.svc.cluster.local:3100
-      editable: false
-      jsonData:
-        tracesToLogs:
-          datasourceUid: loki
-          tags: ["job", "namespace", "pod"]
-        serviceMap:
-          datasourceUid: prometheus
-
-  # --------------------------------------------------------------------------
-  # Grafana sidecar — discover dashboard ConfigMaps across all namespaces.
-  # Any ConfigMap labelled `grafana_dashboard: "1"` is auto-loaded.
-  # --------------------------------------------------------------------------
-  sidecar:
-    dashboards:
-      enabled: true
-      searchNamespace: ALL
-      label: grafana_dashboard
-      labelValue: "1"
-      folderAnnotation: grafana_folder
-      provider:
-        foldersFromFilesStructure: true
-
-  # --------------------------------------------------------------------------
-  # Dashboards imported from grafana.com at Grafana startup.
-  # Each entry sets a datasource variable so panels bind to the right source.
-  #
-  # CLUSTER VIEW
-  #   15760 — Kubernetes / Views / Global  (top-level cluster overview)
-  #   1860  — Node Exporter Full           (per-node CPU/mem/disk/network)
-  #   7249  — Kubernetes Cluster           (namespace resource breakdown)
-  #   3119  — Kubernetes cluster monitoring (pod & container drill-down)
-  #
-  # OPENPANEL APPLICATION VIEW
-  #   9628  — PostgreSQL Database          (postgres_exporter metrics)
-  #   11835 — Redis Dashboard              (redis_exporter metrics)
-  #   13502 — ClickHouse Overview          (native ClickHouse metrics)
-  # --------------------------------------------------------------------------
-  dashboardProviders:
-    dashboardproviders.yaml:
-      apiVersion: 1
-      providers:
-        - name: cluster
-          orgId: 1
-          folder: "Cluster"
-          type: file
-          disableDeletion: false
-          editable: true
-          options:
-            path: /var/lib/grafana/dashboards/cluster
-        - name: openpanel
-          orgId: 1
-          folder: "OpenPanel"
-          type: file
-          disableDeletion: false
-          editable: true
-          options:
-            path: /var/lib/grafana/dashboards/openpanel
-
-  dashboards:
-    cluster:
-      kubernetes-global:
-        gnetId: 15760
-        revision: 37
-        datasource:
-          - name: DS_PROMETHEUS
-            value: Prometheus
-      node-exporter-full:
-        gnetId: 1860
-        revision: 37
-        datasource:
-          - name: DS_PROMETHEUS
-            value: Prometheus
-      kubernetes-cluster:
-        gnetId: 7249
-        revision: 1
-        datasource: Prometheus
-      kubernetes-pods:
-        gnetId: 3119
-        revision: 2
-        datasource: Prometheus
-    openpanel:
-      # Node.js API — prom-client standard metrics + HTTP RED metrics
-      # Labels: method, route, status_code on http_request_duration_seconds
-      openpanel-api-nodejs:
-        gnetId: 11159
-        revision: 1
-        datasource: Prometheus
-      postgres:
-        gnetId: 9628
-        revision: 7
-        datasource: Prometheus
-      redis:
-        gnetId: 11835
-        revision: 1
-        datasource: Prometheus
-      # ClickHouse native Prometheus endpoint (:9363) — metrics like
-      # ClickHouseMetrics_*, ClickHouseProfileEvents_*, ClickHouseAsyncMetrics_*
-      clickhouse:
-        gnetId: 14192
-        revision: 3
-        datasource:
-          - name: DS_PROMETHEUS
-            value: Prometheus
+  enabled: false
+  forceDeployDashboards: true
 
 # ----------------------------------------------------------------------------
-# AlertManager
+# AlertManager — disabled here, deployed as its own ArgoCD Application from
+# k8s/infrastructure/base/observability/alertmanager (prometheus-community
+# /alertmanager chart). Prometheus is wired to it via prometheus.alerting
+# above.
 # ----------------------------------------------------------------------------
 alertmanager:
-  enabled: true
-  ingress:
-    enabled: true
-    ingressClassName: nginx
-    hosts:
-      - alertmanager.local
-  alertmanagerSpec:
-    nodeSelector:
-      workload: observability
-    resources:
-      requests:
-        cpu: 50m
-        memory: 64Mi
-      limits:
-        cpu: 100m
-        memory: 128Mi
-  config:
-    global:
-      resolve_timeout: 5m
-    route:
-      group_by: ['alertname', 'namespace', 'severity']
-      group_wait: 30s
-      group_interval: 5m
-      repeat_interval: 12h
-      receiver: 'null'
-      routes:
-        - matchers:
-            - severity = critical
-          receiver: 'null'
-          continue: false
-    inhibit_rules:
-      - source_matchers:
-          - severity = critical
-        target_matchers:
-          - severity = warning
-        equal: ['alertname', 'namespace']
-    receivers:
-      # 'null' receiver: alerts are evaluated and routed but not forwarded.
-      # Replace with a real integration for production:
-      #   slack_configs, email_configs, pagerduty_configs, webhook_configs
-      - name: 'null'
+  enabled: false
+
+# ----------------------------------------------------------------------------
+# Default rules — disable the alertmanager.rules group. Those rules query
+# metrics from the in-chart `kube-prometheus-stack-alertmanager` target
+# which no longer exists; firing them produces false `AlertmanagerDown`
+# noise. Equivalent rules pointed at the standalone target live alongside
+# the alertmanager chart values.
+# ----------------------------------------------------------------------------
+defaultRules:
+  rules:
+    alertmanager: false
 
 # ----------------------------------------------------------------------------
 # prometheus-operator

@@ -1,7 +1,7 @@
 # PDB for the openpanel-api Rollout. Keeps at least one pod up during
-# node drains and rolling restarts. Selector matches both stable and canary
-# pods (they share app: openpanel-api) so it protects total capacity, not
-# a single revision.
+# node drains and rolling restarts. Selector matches both blue and green
+# ReplicaSets (they share app: openpanel-api) so it protects total capacity,
+# not a single revision.
 #
 # Prod-only: on a 1-node dev cluster minAvailable: 1 would block drains.
 apiVersion: policy/v1

@@ -40,6 +40,24 @@ spec:
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
+  name: alertmanager
+  namespace: argocd
+spec:
+  source:
+    path: k8s/infrastructure/overlays/prod/observability/alertmanager
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: grafana
+  namespace: argocd
+spec:
+  source:
+    path: k8s/infrastructure/overlays/prod/observability/grafana
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
   name: loki
   namespace: argocd
 spec:

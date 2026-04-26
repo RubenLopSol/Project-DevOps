@@ -169,18 +169,18 @@ jobs:
       # -----------------------------------------------------------------------
       # infrastructure layer — observability stack (helmChartInflationGenerator)
       # --enable-helm is required to render Helm charts via kustomize.
-      # These steps validate the full rendered output of all four charts
-      # (kube-prometheus-stack, loki, promtail, tempo) per environment.
+      # These steps validate the full rendered output of all charts
+      # (kube-prometheus-stack, grafana, alertmanager, loki, promtail, tempo) per environment.
       # -----------------------------------------------------------------------
 
       - name: Kustomize build — infra/observability/staging
-        # The observability stack is split into four independent ArgoCD apps
-        # (kube-prometheus-stack, loki, promtail, tempo), each with its own
+        # The observability stack is split into independent ArgoCD apps
+        # (kube-prometheus-stack, grafana, alertmanager, loki, promtail, tempo), each with its own
         # kustomization.yaml. Build each chart separately and concatenate.
         # An explicit '---' is prepended before each chart to ensure valid
         # multi-document YAML when the outputs are concatenated.
         run: |
-          for chart in kube-prometheus-stack loki promtail tempo; do
+          for chart in kube-prometheus-stack grafana alertmanager loki promtail tempo; do
             echo "---"
             kustomize build --enable-helm --load-restrictor LoadRestrictionsNone \
               k8s/infrastructure/overlays/staging/observability/$chart
@@ -188,7 +188,7 @@ jobs:
 
       - name: Kustomize build — infra/observability/prod
         run: |
-          for chart in kube-prometheus-stack loki promtail tempo; do
+          for chart in kube-prometheus-stack grafana alertmanager loki promtail tempo; do
             echo "---"
             kustomize build --enable-helm --load-restrictor LoadRestrictionsNone \
               k8s/infrastructure/overlays/prod/observability/$chart
