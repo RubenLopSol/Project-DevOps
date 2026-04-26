@@ -166,13 +166,22 @@ grafana:
     hosts:
       - grafana.local
 
-  # Datasources: Prometheus + Loki + Tempo con correlación
+  # Datasources: Prometheus + Loki + Tempo con correlación.
+  # `deleteDatasources` runs before `additionalDataSources` so we can change
+  # the UID on Loki/Tempo without leaving stale records (Grafana persists the
+  # first UID it sees, so a plain rename in YAML would not take effect).
+  deleteDatasources:
+    - name: Loki
+      orgId: 1
+    - name: Tempo
+      orgId: 1
   additionalDataSources:
     - name: Loki
       type: loki
+      uid: loki
       access: proxy
       url: http://loki-gateway.observability.svc.cluster.local
-      editable: false
+      editable: true
       jsonData:
         derivedFields:
           - datasourceUid: tempo
@@ -185,7 +194,7 @@ grafana:
       uid: tempo
       access: proxy
       url: http://tempo.observability.svc.cluster.local:3100
-      editable: false
+      editable: true
       jsonData:
         tracesToLogs:
           datasourceUid: loki
@@ -334,6 +343,31 @@ alertmanager:
       # Replace with a real integration for production:
       #   slack_configs, email_configs, pagerduty_configs, webhook_configs
       - name: 'null'
+
+# ----------------------------------------------------------------------------
+# prometheus-operator
+# ----------------------------------------------------------------------------
+# Admission webhooks are disabled because the cert-generation Job they need
+# (kube-prometheus-stack-admission-create) is run as an ArgoCD Sync hook,
+# and ArgoCD's application-controller has a known watch-event race that can
+# leave it sitting on `hookPhase: Running` for several minutes after the Job
+# actually completed — blocking every downstream Application that needs the
+# ServiceMonitor / PrometheusRule CRDs.
+#
+# What we lose: server-side validation of malformed Prometheus / AlertManager
+# / ServiceMonitor CRs at creation time. We don't need it: every CR in this
+# repo is rendered + validated by ci-validate.yml (kubeconform) before it
+# ever reaches the cluster, so the webhook would only catch ad-hoc kubectl
+# applies, which we don't do here.
+prometheusOperator:
+  admissionWebhooks:
+    enabled: false
+    patch:
+      enabled: false
+  # Without webhooks the operator no longer needs TLS — drop the whole TLS
+  # block so the operator starts cleanly.
+  tls:
+    enabled: false
 
 # ----------------------------------------------------------------------------
 # Node Exporter (métricas del nodo)
