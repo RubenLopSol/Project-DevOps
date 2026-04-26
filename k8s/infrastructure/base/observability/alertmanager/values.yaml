@@ -46,14 +46,14 @@ ingress:
           pathType: Prefix
 
 # ----------------------------------------------------------------------------
-# ServiceMonitor so Prometheus scrapes Alertmanager's own metrics.
-# Self-monitoring PrometheusRules pointed at this target live in the KPS
-# values (additionalPrometheusRulesMap.alertmanager-self) so the operator
-# renders them in the same place as the rest of the custom rules.
+# Note: prometheus-community/alertmanager chart 1.13.0 has no ServiceMonitor
+# template — `serviceMonitor.enabled` is silently ignored. The ServiceMonitor
+# is shipped as a standalone manifest at
+#   base/observability/alertmanager/servicemonitor.yaml
+# and pulled in by each overlay's kustomization. The job label it produces
+# (`alertmanager`) matches the alertmanager-self PrometheusRules in the KPS
+# values (additionalPrometheusRulesMap.alertmanager-self).
 # ----------------------------------------------------------------------------
-serviceMonitor:
-  enabled: true
-  interval: 30s
 
 # ----------------------------------------------------------------------------
 # Alertmanager configuration — same routing/inhibit/receiver shape that was

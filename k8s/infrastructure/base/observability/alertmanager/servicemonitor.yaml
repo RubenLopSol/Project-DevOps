@@ -1,0 +1,20 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: alertmanager
+  namespace: observability
+  labels:
+    # Selected by the Prometheus CR via serviceMonitorSelector.matchLabels.
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames:
+      - observability
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: alertmanager
+      app.kubernetes.io/instance: alertmanager
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
