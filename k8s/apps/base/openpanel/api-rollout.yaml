@@ -1,8 +1,25 @@
-# Argo Rollouts canary for openpanel-api.
+# Argo Rollouts blue-green for openpanel-api.
 # Image is rewritten by .github/workflows/cd-update-tags.yml on every push.
 #
-# Rollback:  kubectl argo rollouts abort   openpanel-api -n openpanel
-# Promote:   kubectl argo rollouts promote openpanel-api -n openpanel
+# How it works:
+#   - openpanel-api          (active Service)  always serves the "blue" stack
+#   - openpanel-api-preview  (preview Service) serves the new "green" stack
+#                            during a release, for smoke testing in isolation
+#   - autoPromotionEnabled: false → the green stack is brought up but the
+#     active Service does NOT cut over until a human runs `promote`. This
+#     matches the explicit-cutover semantics blue-green is known for.
+#   - scaleDownDelaySeconds: 600 → the previous "blue" ReplicaSet stays
+#     warm for 10 minutes after promotion so `undo` is instant if a
+#     regression slips past the preview check.
+#
+# Promote (cut over from blue to green):
+#   kubectl argo rollouts promote openpanel-api -n openpanel
+#
+# Roll back (instant — old ReplicaSet is still warm):
+#   kubectl argo rollouts undo    openpanel-api -n openpanel
+#
+# Abort an in-flight release before promotion:
+#   kubectl argo rollouts abort   openpanel-api -n openpanel
 apiVersion: argoproj.io/v1alpha1
 kind: Rollout
 metadata:
@@ -17,17 +34,11 @@ spec:
     matchLabels:
       app: openpanel-api
   strategy:
-    canary:
-      stableService: openpanel-api
-      canaryService: openpanel-api-canary
-      maxSurge: 1
-      maxUnavailable: 0
-      steps:
-        - setWeight: 25
-        - pause: { duration: 30s }
-        - setWeight: 50
-        - pause: { duration: 60s }
-        - setWeight: 100
+    blueGreen:
+      activeService: openpanel-api
+      previewService: openpanel-api-preview
+      autoPromotionEnabled: false
+      scaleDownDelaySeconds: 600
   template:
     metadata:
       labels:

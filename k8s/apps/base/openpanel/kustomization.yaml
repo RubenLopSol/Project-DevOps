@@ -9,10 +9,10 @@ namespace: openpanel
 resources:
   # Config
   - configmap.yaml
-  # API (Argo Rollouts canary)
+  # API (Argo Rollouts blue-green)
   - api-rollout.yaml
   - api-service.yaml
-  - api-canary-service.yaml
+  - api-preview-service.yaml
   # Dashboard
   - start-deployment.yaml
   - start-service.yaml

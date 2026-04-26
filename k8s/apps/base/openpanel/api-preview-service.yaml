@@ -1,0 +1,25 @@
+# Preview Service for the green ReplicaSet during a blue-green release.
+# Argo Rollouts patches the selector with rollouts-pod-template-hash at
+# runtime so it pins to the new revision while openpanel-api (the active
+# Service) keeps serving the blue revision until `kubectl argo rollouts
+# promote` cuts traffic over.
+apiVersion: v1
+kind: Service
+metadata:
+  name: openpanel-api-preview
+  namespace: openpanel
+  labels:
+    app: openpanel-api
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3333
+      targetPort: 3000
+      protocol: TCP
+      name: http
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP
+      name: metrics
+  selector:
+    app: openpanel-api

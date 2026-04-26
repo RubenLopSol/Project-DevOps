@@ -14,11 +14,13 @@ name: CD-Update-GitOps-Manifests
 # ArgoCD polls the infra repo on its tracked branch. When it sees the updated
 # image references it reconciles the openpanel Application → rolls out.
 #
-# Argo Rollouts canary note:
-#   The api manifest is a Rollout (api-rollout.yaml). This workflow updates a
-#   single image reference; the Argo Rollouts controller in-cluster handles
-#   the canary stages (25 % → pause 30 s → 50 % → pause 60 s → 100 %) and
-#   instant rollback on `kubectl argo rollouts abort openpanel-api -n openpanel`.
+# Argo Rollouts blue-green note:
+#   The api manifest is a Rollout (api-rollout.yaml). This workflow only
+#   bumps the image reference; the Argo Rollouts controller in-cluster
+#   spins up a green ReplicaSet alongside the blue one and waits for a
+#   manual `kubectl argo rollouts promote openpanel-api -n openpanel`
+#   before flipping the active Service. The previous blue ReplicaSet is
+#   kept warm for scaleDownDelaySeconds so `undo` is instant.
 #
 # Trigger contract (from the fork):
 #   event-type:    app-image-published
@@ -88,8 +90,9 @@ jobs:
       # -----------------------------------------------------------------------
 
       - name: Update API image tag (Rollout)
-        # The Argo Rollouts controller takes over the canary stages
-        # (25 % → 50 % → 100 %) automatically once ArgoCD syncs this change.
+        # ArgoCD syncs this change; the Argo Rollouts controller then brings
+        # up the green ReplicaSet behind openpanel-api-preview and waits for
+        # a manual promote before flipping the active Service.
         run: |
           sed -i "s|image: ghcr.io/.*/openpanel-api:.*|image: ghcr.io/${{ steps.ctx.outputs.owner }}/openpanel-api:main-${{ steps.ctx.outputs.short }}|g" \
             k8s/apps/base/openpanel/api-rollout.yaml
