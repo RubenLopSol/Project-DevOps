@@ -59,6 +59,14 @@ spec:
                 secretKeyRef:
                   name: minio-credentials
                   key: MINIO_ROOT_PASSWORD
+            # runAsUser 1000 has no home dir in the mc image, so HOME falls back
+            # to "/" and mc tries to create /.mc — which readOnlyRootFilesystem
+            # blocks. Point mc at a writable emptyDir instead.
+            - name: MC_CONFIG_DIR
+              value: /tmp/.mc
+          volumeMounts:
+            - name: mc-config
+              mountPath: /tmp
           resources:
             requests:
               cpu: 10m
@@ -74,3 +82,6 @@ spec:
             capabilities:
               drop:
                 - ALL
+      volumes:
+        - name: mc-config
+          emptyDir: {}
