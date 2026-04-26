@@ -10,3 +10,10 @@ resources:
   limits:
     cpu: 200m
     memory: 256Mi
+
+persistence:
+  enabled: true
+  type: pvc
+  size: 1Gi
+  accessModes:
+    - ReadWriteOnce
