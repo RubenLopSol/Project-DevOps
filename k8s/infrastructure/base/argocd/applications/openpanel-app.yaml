@@ -42,6 +42,12 @@ spec:
       - PrunePropagationPolicy=foreground
       - PruneLast=true
       - ServerSideApply=true
+      # Skip dry-run validation when a referenced CRD does not yet exist
+      # on the destination cluster. Without this, a wave-2 sync that races
+      # ahead of kube-prometheus-stack's CRD installation fails the dry-run
+      # for ServiceMonitor/PodMonitor resources, exhausts the retry budget,
+      # and leaves openpanel stuck OutOfSync/Missing until a manual sync.
+      - SkipDryRunOnMissingResource=true
     retry:
       limit: 5
       backoff:

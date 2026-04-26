@@ -1,0 +1,21 @@
+# Staging trim for ClickHouse.
+# Prod values (500m/2Gi req, 2/8Gi limit) are way over what a 4 GiB Minikube
+# node can hand out. ClickHouse idles around 500 MiB locally, so this gives
+# everything else on the app node a fighting chance.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: clickhouse
+  namespace: openpanel
+spec:
+  template:
+    spec:
+      containers:
+        - name: clickhouse
+          resources:
+            requests:
+              cpu: 250m
+              memory: 768Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi

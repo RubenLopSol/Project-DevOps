@@ -1,5 +1,18 @@
 # =============================================================================
 # Tempo — STAGING overrides
 # Merged on top of k8s/infrastructure/base/observability/tempo/values.yaml
-# No staging-specific overrides needed — base values fit all environments.
 # =============================================================================
+
+# Persistent trace storage on the obs node (local-path provisioner).
+#
+# Out of the box the chart mounts /var/tempo as an emptyDir, so every pod
+# restart wipes the trace ring — useless for any kind of demo. 1 GiB is
+# plenty here; Tempo compacts older traces and a normal demo run only
+# generates a few MiB per minute. For prod, push this to 50–100 GiB and
+# point storage.trace.backend at S3.
+persistence:
+  enabled: true
+  storageClassName: local-path
+  accessModes:
+    - ReadWriteOnce
+  size: 1Gi

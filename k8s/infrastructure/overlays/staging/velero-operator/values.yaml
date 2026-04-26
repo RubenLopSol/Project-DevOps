@@ -1,23 +1,28 @@
 # =============================================================================
-# Velero — STAGING overrides
-# Backend: in-cluster MinIO (namespace: backup, port 9000)
+# Velero — staging overrides
+# Backend: in-cluster MinIO in the `backup` namespace, port 9000.
 #
-# MinIO is deployed by ArgoCD and provides S3-compatible storage backed by
-# a 5Gi PVC. Fully self-contained — no host-side process required.
-# Credentials match the minio-credentials SealedSecret (staging values).
+# MinIO is deployed by ArgoCD and gives us an S3-compatible bucket on a
+# 5Gi PVC. Nothing on the host needs to be running for this to work.
+# Credentials line up with the minio-credentials SealedSecret.
 # =============================================================================
 
-# MinIO credentials (staging-only, non-sensitive defaults from SealedSecret)
+# These have to match the minio-credentials SealedSecret in the backup
+# namespace — that's what MinIO reads on first boot to set its root user.
+# Defaults from scripts/reseal-secrets.sh are minioadmin/minioadmin. If you
+# override them via MINIO_ROOT_USER / MINIO_ROOT_PASSWORD when resealing,
+# update them here in the same PR or the BSL throws "InvalidAccessKeyId".
+# Background in project-step-by-step.md §12.
 credentials:
   secretContents:
     cloud: |
       [default]
-      aws_access_key_id=minio
-      aws_secret_access_key=minio123
+      aws_access_key_id=minioadmin
+      aws_secret_access_key=minioadmin
 
-# BackupStorageLocation is managed declaratively by the 'velero' ArgoCD app
-# (k8s/infrastructure/overlays/staging/velero). Do not configure it here to
-# avoid SharedResourceWarning from two apps owning the same resource.
+# Don't configure the BackupStorageLocation here — the `velero` ArgoCD app
+# (k8s/infrastructure/overlays/staging/velero) owns it. Two apps claiming
+# the same resource just gives you a SharedResourceWarning.
 
 # Smaller resources for Minikube
 resources:
