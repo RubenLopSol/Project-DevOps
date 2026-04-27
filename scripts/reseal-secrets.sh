@@ -10,8 +10,6 @@ set -euo pipefail
 #   key. Grafana, MinIO and all openpanel pods CrashLoop until the six
 #   SealedSecrets are re-sealed against the new public key.
 #
-#   Full explanation: docs/testing-local-stack.md §10.7
-#
 # What this script does:
 #   1. Waits for the sealed-secrets controller deployment to become Ready.
 #   2. Fetches the live public certificate (kubeseal --fetch-cert).
@@ -24,14 +22,6 @@ set -euo pipefail
 #      decrypts them and materialises the real Secret objects within a
 #      few seconds, unblocking any pods that were Pending on a missing
 #      secret.
-#
-# Note: this script applies the six new SealedSecrets live AND rewrites
-#   k8s/infrastructure/overlays/staging/sealed-secrets/secrets.yaml in the
-#   working tree with the new ciphertext. Without that rewrite ArgoCD's
-#   selfHeal would immediately revert the live objects to the stale git
-#   copies, putting the sealed-secrets Application back into a Degraded
-#   state (controller holds the new keypair, git still holds ciphertext
-#   sealed against the old one). The script never commits — that's on you.
 #
 # Usage:
 #   ./scripts/reseal-secrets.sh
@@ -171,10 +161,6 @@ success "Wrote public cert to ${PUBKEY}"
 
 # -----------------------------------------------------------------------------
 # Seal each secret
-#
-# Pattern: `kubectl create secret … --dry-run=client -o yaml` writes a
-# plaintext Secret to stdout; kubeseal encrypts it against the fetched
-# public cert and writes a SealedSecret YAML.
 # -----------------------------------------------------------------------------
 header "Sealing six secrets"
 
@@ -224,8 +210,7 @@ seal_secret minio-credentials backup \
   "--from-literal=MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}"
 
 # -----------------------------------------------------------------------------
-# Apply all six at once — the controller decrypts each into a real Secret
-# within a few seconds.
+# Apply all six at once
 # -----------------------------------------------------------------------------
 header "Applying the six SealedSecrets to the cluster"
 
@@ -263,13 +248,6 @@ check_secret backup        minio-credentials
 
 # -----------------------------------------------------------------------------
 # Rewrite the committed git file so ArgoCD selfHeal stops reverting us.
-#
-# Without this step, ArgoCD sees cluster state (freshly sealed against the
-# live keypair) drift from git state (sealed against the previous keypair),
-# and selfHeal reapplies the stale git copies — leaving the sealed-secrets
-# Application Degraded. Rewriting the file in-place is a no-op for ArgoCD
-# until you commit + push; once committed, selfHeal will be a no-op because
-# git and cluster both hold the same ciphertext.
 # -----------------------------------------------------------------------------
 if [ "${SKIP_GIT_REWRITE}" = "1" ]; then
   echo ""
@@ -284,12 +262,7 @@ else
     exit 1
   fi
 
-  # Emit each sealed-secret manifest with the same section-header layout as
-  # the file committed to git. The kubeseal-produced files in ${WORK_DIR}
-  # may or may not start with a `---` document separator; we strip any
-  # leading separator and add exactly one ourselves for consistency.
   strip_leading_sep() {
-    # Drop a single leading `---` line if present; emit the rest verbatim.
     awk 'NR==1 && /^---[[:space:]]*$/ {next} {print}' "$1"
   }
 

@@ -1,13 +1,8 @@
-# Strategic merge patch — ConfigMap for prod
 #
 # Overrides two values from the base ConfigMap:
 #   NEXT_PUBLIC_API_URL       — public-facing API domain (used by browser JS)
 #   NEXT_PUBLIC_DASHBOARD_URL — public-facing dashboard domain
 #
-# NOTE: NEXT_PUBLIC_* vars are baked into the Next.js bundle at build time.
-# These values only affect server-side Next.js code unless the Docker image
-# is built with these as build args (--build-arg NEXT_PUBLIC_API_URL=...).
-# Update to match your actual prod domain before deploying.
 apiVersion: v1
 kind: ConfigMap
 metadata:

@@ -1,7 +1,4 @@
 # Staging trim for Postgres.
-# The local DB has barely any rows in it — postgres sits at ~30 MiB idle.
-# Prod values (250m/512Mi req) are huge by comparison, so we drop them and
-# still keep ~4× headroom over observed usage.
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:

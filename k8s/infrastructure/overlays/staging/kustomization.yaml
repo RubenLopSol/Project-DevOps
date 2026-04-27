@@ -1,13 +1,3 @@
-# =============================================================================
-# STAGING overlay — infrastructure aggregator (pure Kustomize)
-#
-# Aggregates the pure-Kustomize infrastructure components for staging.
-# Observability is excluded — it requires --enable-helm and is validated
-# separately in CI: kustomize build --enable-helm .../staging/observability
-# Sealed-secrets is also excluded — it uses --enable-helm.
-#
-# CI build: kustomize build k8s/infrastructure/overlays/staging
-# =============================================================================
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 

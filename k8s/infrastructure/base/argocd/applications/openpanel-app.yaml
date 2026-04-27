@@ -16,17 +16,11 @@ spec:
   source:
     repoURL: https://github.com/RubenLopSol/Project-DevOps.git
     targetRevision: release/main-5faadfb
-    # Set by overlays/*/argocd/patches/app-env.yaml — never hardcoded here
+    # Set by overlays/*/argocd/patches/app-env.yaml 
     path: PLACEHOLDER
   destination:
     server: https://kubernetes.default.svc
     namespace: openpanel
-  # volumeClaimTemplates is immutable on a StatefulSet, so once a cluster is
-  # running we can't patch storageClassName. Fresh clusters get the right
-  # value (local-path) from the staging overlay; older clusters keep whatever
-  # they were created with, and ArgoCD rightly refuses to fight that.
-  # TODO: drop this ignoreDifferences once staging gets rebuilt — on a clean
-  # cluster the field already matches and this entry becomes a no-op.
   ignoreDifferences:
     - group: apps
       kind: StatefulSet

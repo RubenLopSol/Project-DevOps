@@ -1,6 +1,3 @@
-# Prod overlay for argo-rollouts. Inherits the base install and turns off
-# the dashboard ingress: reach the dashboard via port-forward or wire it
-# into SSO separately, never on an open hostname.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 

@@ -13,7 +13,7 @@ spec:
   source:
     repoURL: https://github.com/RubenLopSol/Project-DevOps.git
     targetRevision: main
-    # Set by overlays/*/argocd/patches/app-env.yaml — never hardcoded here
+    # Set by overlays/*/argocd/patches/app-env.yaml
     path: PLACEHOLDER
   destination:
     server: https://kubernetes.default.svc
@@ -23,10 +23,6 @@ spec:
       prune: true
       selfHeal: true
     syncOptions:
-      # Velero CRDs (BackupStorageLocation, Schedule) require the Velero operator
-      # to be pre-installed via Helm. SkipDryRunOnMissingResource prevents ArgoCD
-      # from hard-blocking other apps when the CRDs haven't been registered yet.
-      # Once `make velero-install ENV=<env>` has been run, this app will sync cleanly.
       - SkipDryRunOnMissingResource=true
     retry:
       limit: 5

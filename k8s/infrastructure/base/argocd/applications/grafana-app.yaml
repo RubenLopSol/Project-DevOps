@@ -16,7 +16,7 @@ spec:
   source:
     repoURL: https://github.com/RubenLopSol/Project-DevOps.git
     targetRevision: main
-    # Set by overlays/*/argocd/patches/app-env.yaml — never hardcoded here
+    # Set by overlays/*/argocd/patches/app-env.yaml 
     path: PLACEHOLDER
     kustomize: {}
   destination:

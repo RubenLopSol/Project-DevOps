@@ -1,18 +1,3 @@
-# =============================================================================
-# Loki — base chart definition
-#
-# Chart:   grafana/loki
-# Version: 6.6.2
-# Mode:    SingleBinary (local/staging) — filesystem storage
-#
-# Standalone deploy (base values only):
-#   kustomize build --enable-helm k8s/infrastructure/base/observability/loki | kubectl apply -f -
-#
-# In practice, deploy via the environment overlay which merges base values
-# with environment-specific overrides:
-#   kustomize build --enable-helm k8s/infrastructure/overlays/staging/observability
-# =============================================================================
-
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 

@@ -1,10 +1,3 @@
-# =============================================================================
-# cert-manager — PROD overlay
-#
-# Renders the cert-manager chart with prod values (overridable via a prod-only
-# values.yaml if bumping replicas for HA) and applies the ClusterIssuer.
-# =============================================================================
-
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 

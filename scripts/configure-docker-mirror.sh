@@ -1,31 +1,16 @@
 #!/bin/bash
 # =============================================================================
-# configure-docker-mirror.sh — point dockerd at mirror.gcr.io
-#
-# The problem this fixes: on networks where Docker Hub's Cloudflare blob
-# endpoint (172.64.0.0/16) is throttled or blocked, every `docker pull`
-# of an official `library/*` image — busybox, redis, postgres, memcached,
-# you name it — hangs and dies with:
-#     dial tcp 172.64.66.1:443: i/o timeout
-# That basically halts a Minikube bring-up. local-path-provisioner's
-# helper pod, the Loki cache, MinIO, postgres, redis, and the OpenPanel
-# migration init-container all need Docker Hub images to start.
 #
 # What this script does: drops mirror.gcr.io into /etc/docker/daemon.json
 # as a registry mirror. From there, Docker Hub pulls get transparently
 # routed through Google's read-only mirror, which sits on a different CDN
 # and tends to be reachable everywhere.
 #
-# Idempotent — merges into any existing daemon.json, never overwrites it.
-#
 # Usage:
 #   sudo ./scripts/configure-docker-mirror.sh
 #
 # Restart docker afterwards so the mirror takes effect:
 #   sudo systemctl restart docker
-#
-# Sanity-check it stuck:
-#   docker info | grep -A2 "Registry Mirrors"
 # =============================================================================
 
 set -euo pipefail

@@ -3,13 +3,6 @@
 # Adds TLS to both virtual hosts via cert-manager (ClusterIssuer: letsencrypt-prod).
 # Replaces dev hostnames (*.local) with real production domain names.
 #
-# Prerequisites:
-#   - cert-manager installed in the cluster
-#   - ClusterIssuer named "letsencrypt-prod" configured with your ACME account
-#   - DNS records pointing openpanel.example.com and api.openpanel.example.com
-#     to your cluster's ingress-nginx external IP
-#
-# Update the hostnames below to match your actual domain before deploying.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:

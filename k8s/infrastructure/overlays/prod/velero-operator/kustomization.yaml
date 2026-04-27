@@ -1,14 +1,3 @@
-# =============================================================================
-# Velero Operator — PROD overlay
-#
-# Installs the Velero operator with AWS S3 as the backend, using IRSA for
-# authentication (no static credentials).
-#
-# Standalone build:
-#   kustomize build --enable-helm --load-restrictor LoadRestrictionsNone \
-#     k8s/infrastructure/overlays/prod/velero-operator
-# =============================================================================
-
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 

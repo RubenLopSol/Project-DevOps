@@ -4,7 +4,6 @@ metadata:
   name: alertmanager
   namespace: observability
   labels:
-    # Selected by the Prometheus CR via serviceMonitorSelector.matchLabels.
     release: kube-prometheus-stack
 spec:
   namespaceSelector:

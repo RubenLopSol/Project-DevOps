@@ -1,12 +1,5 @@
-# =============================================================================
-# kube-prometheus-stack — PROD overrides
-# Merged on top of k8s/infrastructure/base/observability/kube-prometheus-stack/values.yaml
-# These values increase retention and resources for production workloads.
-# =============================================================================
-
 prometheus:
   prometheusSpec:
-    # 30-day retention for compliance and incident investigation
     retention: 30d
     replicas: 2
     resources:
@@ -22,8 +15,3 @@ prometheus:
           resources:
             requests:
               storage: 50Gi
-
-# Grafana and Alertmanager are deployed as their own ArgoCD Applications;
-# their per-env sizing lives in:
-#   overlays/prod/observability/grafana/values.yaml
-#   overlays/prod/observability/alertmanager/values.yaml

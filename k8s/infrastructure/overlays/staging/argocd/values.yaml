@@ -1,10 +1,4 @@
-# ArgoCD staging Helm values — Minikube / local development
-#
-# Merged on top of base/argocd/install/values.yaml by the helmCharts entry
-# in overlays/staging/argocd/kustomization.yaml.
-
 server:
-  # TLS terminated at ingress-nginx — ArgoCD server runs in insecure mode
   insecure: true
 
   ingress:

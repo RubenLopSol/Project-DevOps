@@ -1,5 +1,3 @@
-# Strategic merge patch — start (Next.js dashboard) for dev
-# Reduces resource requests for Minikube.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

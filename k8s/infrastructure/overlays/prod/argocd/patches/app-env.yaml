@@ -1,5 +1,3 @@
-# Prod path patches — switches every Application CR from staging to prod overlay.
-# Applied by overlays/prod/argocd/kustomization.yaml as a strategic merge patch.
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application

@@ -1,7 +1,3 @@
-# Prod overrides on top of base/argo-rollouts/values.yaml.
-# Sizing and nodeSelector come from base; only what actually differs in prod
-# lives here.
-
 controller:
   replicas: 3
 

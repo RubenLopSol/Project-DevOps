@@ -3,7 +3,7 @@
 #
 # cert-manager reconciles this into a Secret named "openpanel-tls" in the
 # openpanel namespace. The Ingress (ingress.yaml) references that Secret in
-# its tls: block. Rotation is automatic (cert-manager renews at 2/3 of lifetime).
+# its tls: block. Rotation is automatic.
 #
 # Issuer: "openpanel-selfsigned" — a ClusterIssuer provisioned by the
 # cert-manager overlay. Staging = selfSigned{}; prod swaps it for ACME

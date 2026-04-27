@@ -1,12 +1,5 @@
 # =============================================================================
 # cert-manager — Helm values
-#
-# Chart: jetstack/cert-manager  (version: v1.16.2)
-# Docs:  https://cert-manager.io/docs/installation/helm/
-#
-# Rendered via helmChartInflationGenerator — applied through the env overlay:
-#   kustomize build --enable-helm k8s/infrastructure/overlays/staging/cert-manager | kubectl apply -f -
-#   kustomize build --enable-helm k8s/infrastructure/overlays/prod/cert-manager   | kubectl apply -f -
 # =============================================================================
 
 # ---- CRDs ----
@@ -36,7 +29,7 @@ resources:
     memory: 256Mi
 
 # ---- Webhook + CA injector ----
-# Both subcomponents are required. Keep defaults but pin node placement.
+# Both subcomponents are required.
 webhook:
   replicaCount: 1
   nodeSelector:

@@ -1,12 +1,6 @@
-# =============================================================================
-# kube-prometheus-stack — STAGING overrides
-# Merged on top of k8s/infrastructure/base/observability/kube-prometheus-stack/values.yaml
-# These values shrink resources and retention to fit Minikube.
-# =============================================================================
 
 prometheus:
   prometheusSpec:
-    # 3-day retention — enough for local development/debugging
     retention: 3d
     resources:
       requests:
@@ -18,25 +12,12 @@ prometheus:
     storageSpec:
       volumeClaimTemplate:
         spec:
-          # local-path creates the PV directory on the node where the pod is scheduled,
-          # ensuring PVs land on the observability node (workload=observability nodeSelector).
           storageClassName: local-path
           resources:
             requests:
               storage: 5Gi
 
-# Grafana and Alertmanager are deployed as their own ArgoCD Applications;
-# their per-env sizing lives in:
-#   overlays/<env>/observability/grafana/values.yaml
-#   overlays/<env>/observability/alertmanager/values.yaml
 
-# ----------------------------------------------------------------------------
-# Minikube-specific: disable scraping of control-plane components that are
-# not accessible from inside the cluster in minikube.
-# These generate false-positive critical alerts (KubeControllerManagerDown,
-# KubeSchedulerDown, etcdMembersDown) which would mask real issues.
-# In prod these must be re-enabled and the components must be reachable.
-# ----------------------------------------------------------------------------
 kubeControllerManager:
   enabled: false
 

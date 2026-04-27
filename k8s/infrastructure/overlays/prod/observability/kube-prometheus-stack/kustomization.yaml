@@ -1,15 +1,3 @@
-# =============================================================================
-# kube-prometheus-stack — PROD overlay
-#
-# Layers prod-specific values on top of the base values.
-# Kustomize cannot merge helmCharts blocks, so the full chart spec is
-# re-declared here with valuesFile pointing at the base and
-# additionalValuesFiles adding the prod overrides.
-#
-# Standalone build:
-#   kustomize build --enable-helm k8s/infrastructure/overlays/prod/observability/kube-prometheus-stack
-# =============================================================================
-
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 

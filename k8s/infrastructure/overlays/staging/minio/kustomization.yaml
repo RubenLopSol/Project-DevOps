@@ -1,10 +1,5 @@
 # =============================================================================
 # STAGING overlay — MinIO
-#
-# Reduces MinIO PVC from 10Gi (base) to 5Gi to fit Minikube disk limits.
-#
-# Standalone build:
-#   kustomize build k8s/infrastructure/overlays/staging/minio
 # =============================================================================
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization

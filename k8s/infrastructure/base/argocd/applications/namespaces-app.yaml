@@ -13,7 +13,6 @@ spec:
   source:
     repoURL: https://github.com/RubenLopSol/Project-DevOps.git
     targetRevision: main
-    # Same path for all environments — namespaces are cluster-wide, not env-specific
     path: k8s/infrastructure/base/namespaces
   destination:
     server: https://kubernetes.default.svc

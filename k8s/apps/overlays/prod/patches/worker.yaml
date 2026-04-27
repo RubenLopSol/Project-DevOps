@@ -1,5 +1,3 @@
-# Strategic merge patch — worker deployment for prod
-# Scales to 2 replicas so queue processing continues if one pod is evicted.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

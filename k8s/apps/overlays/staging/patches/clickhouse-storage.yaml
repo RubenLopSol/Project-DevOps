@@ -1,5 +1,4 @@
 # Override clickhouse StorageClass to local-path for staging.
-# See postgres-storage.yaml for the rationale.
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:

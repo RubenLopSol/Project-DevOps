@@ -17,9 +17,6 @@
 #   redis     → redis-exporter     on :9121
 #   clickhouse → native /metrics   on :9363
 #
-# relabelings: copy the pod's `app` label into the scraped metric labels so
-# that up{app="openpanel-api"}, up{app="postgres"} etc. work as expected.
-# Without this, the Prometheus Operator drops pod labels from metric labels.
 # =============================================================================
 
 ---

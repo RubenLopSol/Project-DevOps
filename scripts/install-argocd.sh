@@ -135,8 +135,6 @@ check_prerequisites
 header "Installing ArgoCD (ENV=${ENV}) — pass 1: chart only"
 step "Rendering base chart (registers CRDs — no Application/AppProject resources yet)"
 # Pass 1: install only the ArgoCD Helm chart from the base.
-# The ArgoCD CRDs (Application, AppProject, etc.) live in the chart's crds/ directory.
-# They must be registered before the Application/AppProject resources in pass 2.
 kustomize build --enable-helm --load-restrictor LoadRestrictionsNone \
   k8s/infrastructure/base/argocd/install \
   | kubectl apply -f -
@@ -156,7 +154,6 @@ success "ArgoCD server is ready"
 header "Installing ArgoCD (ENV=${ENV}) — pass 2: full overlay"
 step "Rendering overlay: ${OVERLAY}"
 # Pass 2: apply the full overlay — CRDs now registered, so Application and
-# AppProject resources are accepted by the API server.
 kustomize build --enable-helm --load-restrictor LoadRestrictionsNone "${OVERLAY}" \
   | kubectl apply -f -
 success "ArgoCD overlay applied (Applications + AppProject)"

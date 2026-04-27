@@ -1,5 +1,5 @@
 # Database backup - hourly (prod-only)
-# Staging uses daily-full-backup only (see base) — hourly is too expensive for Minikube.
+# Staging uses daily-full-backup only
 apiVersion: velero.io/v1
 kind: Schedule
 metadata:

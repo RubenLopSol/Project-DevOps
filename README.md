@@ -442,4 +442,4 @@ ArgoCD hace polling de este repo y reconcilia cuando ve el cambio de tag. El con
 
 ## 📚 Lectura adicional
 
-La justificación completa del diseño (estrategia de seguridad, arquitectura de aplicación, estimación de costes, plan de trabajo, referencias) vive en [`docs/documentacion/Lopez_Ruben_FinalProjectProposal.md`](docs/final-project.md).
+La justificación completa del diseño (estrategia de seguridad, arquitectura de aplicación, estimación de costes, plan de trabajo, referencias) vive en [`docs/final-project.md`](docs/final-project.md).

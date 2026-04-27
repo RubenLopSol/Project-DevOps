@@ -1,13 +1,3 @@
-# =============================================================================
-# PROD overlay — Velero
-#
-# Overrides BackupStorageLocation to use real AWS S3, provisioned by
-# terraform/environments/prod (IAM Role via IRSA + bucket).
-# Also adds the hourly database backup schedule (prod-only).
-#
-# Standalone build:
-#   kustomize build k8s/infrastructure/overlays/prod/velero
-# =============================================================================
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 

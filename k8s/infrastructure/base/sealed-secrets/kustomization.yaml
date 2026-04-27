@@ -1,17 +1,3 @@
-# =============================================================================
-# Sealed Secrets controller — base chart definition
-#
-# Chart:   sealed-secrets/sealed-secrets
-# Version: 2.16.1
-# Repo:    https://bitnami-labs.github.io/sealed-secrets
-#
-# Standalone deploy (base values only):
-#   kustomize build --enable-helm k8s/infrastructure/base/sealed-secrets | kubectl apply -f -
-#
-# In practice deploy via the environment overlay:
-#   kustomize build --enable-helm k8s/infrastructure/overlays/staging/sealed-secrets | kubectl apply -f -
-# =============================================================================
-
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
