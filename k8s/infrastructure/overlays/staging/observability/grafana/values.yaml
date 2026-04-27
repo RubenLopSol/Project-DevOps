@@ -3,12 +3,19 @@
 # Merged on top of base/observability/grafana/values.yaml.
 # =============================================================================
 
+# CPU bumped from 200m → 750m after observing nginx 503 (upstream addr empty,
+# response time 0.000s) when a dashboard variable change fired all panels at
+# once. Grafana saturated its 200m limit, the OS throttled the process, and
+# ingress-nginx couldn't establish an upstream connection inside its connect
+# timeout — which renders as "503 Service Temporarily Unavailable" in the
+# browser. 750m gives headroom for concurrent panel queries on a multi-panel
+# dashboard. Memory is fine at 256Mi (steady state ~130Mi).
 resources:
   requests:
     cpu: 100m
     memory: 128Mi
   limits:
-    cpu: 200m
+    cpu: 750m
     memory: 256Mi
 
 persistence:

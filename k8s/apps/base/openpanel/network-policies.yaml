@@ -58,7 +58,7 @@ spec:
       ports:
         - port: 3000
 ---
-# API: allow egress to databases
+# API: allow egress to databases + Tempo (OTLP traces)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -90,8 +90,22 @@ spec:
               app: redis
       ports:
         - port: 6379
+    # OTLP traces → Tempo in the observability namespace.
+    # Without this rule the OTel SDK BatchSpanProcessor times out exporting
+    # spans, which both empties the Tempo dashboard and floods api stderr
+    # with `Error: Timeout` from sdk-trace-base.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: tempo
+      ports:
+        - port: 4317   # OTLP gRPC
+        - port: 4318   # OTLP HTTP/protobuf  (used by openpanel-api)
 ---
-# Worker: allow egress to databases
+# Worker: allow egress to databases + Tempo (OTLP traces)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -123,6 +137,16 @@ spec:
               app: redis
       ports:
         - port: 6379
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: tempo
+      ports:
+        - port: 4317
+        - port: 4318
 ---
 # Start (Dashboard): allow ingress from Ingress Controller
 apiVersion: networking.k8s.io/v1
