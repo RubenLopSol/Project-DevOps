@@ -3,6 +3,12 @@ kind: Deployment
 metadata:
   name: minio
   namespace: backup
+  annotations:
+    # MinIO only ships in staging (Minikube). Prod Velero writes directly to
+    # AWS S3 via IRSA, so this Deployment is not rendered in the prod overlay.
+    # In the single-node test cluster it is reached via cluster DNS from the
+    # `velero` namespace; adding a NetworkPolicy here is not worth the churn.
+    ignore-check.kube-linter.io/non-isolated-pod: "staging-only test instance; not deployed to prod"
   labels:
     app: minio
 spec:

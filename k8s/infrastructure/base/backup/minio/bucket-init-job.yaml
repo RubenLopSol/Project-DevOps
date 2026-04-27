@@ -15,6 +15,9 @@ metadata:
   annotations:
     argocd.argoproj.io/hook: PostSync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # Same waiver as the minio Deployment — short-lived PostSync hook in the
+    # staging-only `backup` namespace; no cross-namespace ingress to isolate.
+    ignore-check.kube-linter.io/non-isolated-pod: "staging-only PostSync hook; not deployed to prod"
 spec:
   ttlSecondsAfterFinished: 300
   backoffLimit: 6

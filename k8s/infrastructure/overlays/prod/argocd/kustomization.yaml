@@ -33,3 +33,17 @@ labels:
 
 patches:
   - path: patches/app-env.yaml
+  # Remove the minio Application from the prod App-of-Apps. Prod Velero
+  # writes to real AWS S3 (overlays/prod/velero/backup-location-patch.yaml),
+  # so the in-cluster MinIO Deployment shipped by base/argocd is unused.
+  - target:
+      group: argoproj.io
+      version: v1alpha1
+      kind: Application
+      name: minio
+    patch: |-
+      $patch: delete
+      apiVersion: argoproj.io/v1alpha1
+      kind: Application
+      metadata:
+        name: minio

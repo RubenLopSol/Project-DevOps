@@ -11,6 +11,8 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+# MinIO is intentionally excluded from prod: prod Velero is patched to use
+# real AWS S3 (overlays/prod/velero/backup-location-patch.yaml, IRSA-backed),
+# so the in-cluster MinIO deployment used by staging is not needed here.
 resources:
-  - minio
   - velero

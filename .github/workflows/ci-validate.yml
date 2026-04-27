@@ -290,11 +290,7 @@ jobs:
       - name: Kube-linter — best-practices checks (apps/prod)
         run: kube-linter lint /tmp/rendered-apps-prod.yaml --config .kube-linter.yaml
 
-      # infra/staging is treated as a local-testing target (Minikube + in-cluster
-      # MinIO for Velero), so kube-linter findings here are reported but do not
-      # fail CI. infra/prod and both apps overlays remain strict.
       - name: Kube-linter — best-practices checks (infra/staging)
-        continue-on-error: true
         run: kube-linter lint /tmp/rendered-infra-staging.yaml --config .kube-linter.yaml
 
       - name: Kube-linter — best-practices checks (infra/prod)

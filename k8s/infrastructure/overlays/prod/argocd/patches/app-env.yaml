@@ -82,15 +82,8 @@ spec:
   source:
     path: k8s/infrastructure/overlays/prod/observability/tempo
 ---
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: minio
-  namespace: argocd
-spec:
-  source:
-    path: k8s/infrastructure/overlays/prod/minio
----
+# minio Application is removed from the prod render via a delete patch in
+# overlays/prod/argocd/kustomization.yaml (prod uses real AWS S3, not MinIO).
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
