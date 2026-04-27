@@ -21,6 +21,12 @@ module "velero_iam" {
   velero_namespace       = var.velero_namespace
   velero_service_account = var.velero_service_account
 
+  # Pinned name so the IRSA annotation on Velero's ServiceAccount (set in
+  # k8s/infrastructure/overlays/prod/velero-operator/values.yaml) and the
+  # runbook in k8s/infrastructure/base/backup/README.md don't drift away
+  # from what Terraform actually creates.
+  role_name = "velero-prod-role"
+
   tags = {
     Project     = "openpanel"
     Environment = "prod"

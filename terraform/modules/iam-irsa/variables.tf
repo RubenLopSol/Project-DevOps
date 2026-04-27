@@ -20,6 +20,12 @@ variable "velero_service_account" {
   default     = "velero"
 }
 
+variable "role_name" {
+  description = "Name for the Velero IAM Role. When null, falls back to the original 'velero-<eks_cluster_name>' pattern so existing callers keep their current name. Override per-environment when the role name has to match a pre-agreed value (e.g. one referenced from a Helm values file or runbook)."
+  type        = string
+  default     = null
+}
+
 variable "tags" {
   description = "Tags applied to all IAM resources"
   type        = map(string)
