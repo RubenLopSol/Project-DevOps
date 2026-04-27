@@ -6,18 +6,15 @@ checks:
     - "unset-memory-requirements"
     - "privilege-escalation-container"
     - "writable-host-mount"
-  # Explicitly exclude checks that do not apply to this project:
-  # - no-anti-affinity: single-node Minikube cluster — anti-affinity is meaningless
-  # - no-read-only-root-fs: databases (postgres, clickhouse) and init containers need writable FS
-  # - run-as-non-root: fix-permissions init container must run as root to chown volumes
-  # - non-isolated-pod: network policies are managed separately, not in app manifests
+    - "non-isolated-pod"
+  # Excludes (why each one is off):
+  # - no-anti-affinity: single-replica StatefulSets, all pinned to workload=app. Nothing to spread.
+  # - no-read-only-root-fs: postgres needs a writable data dir; migrate-job writes the Prisma client.
+  # - run-as-non-root: postgres + redis fix-permissions init containers chown the PVC as root.
+  # - dangling-service: kube-prometheus-stack ships Services targeting kubeadm-owned pods
+  #   (CoreDNS, etcd, kube-proxy) that aren't in the rendered YAML.
   exclude:
     - "no-anti-affinity"
     - "no-read-only-root-fs"
     - "run-as-non-root"
-    - "non-isolated-pod"
-    # dangling-service: kube-prometheus-stack creates Services in kube-system that
-    # target system pods (CoreDNS, etcd, kube-proxy, controller-manager, scheduler).
-    # Those pods are not in the rendered YAML — they are managed by kubeadm/minikube.
-    # Kube-linter cannot see them at validation time so it flags these as dangling.
     - "dangling-service"
