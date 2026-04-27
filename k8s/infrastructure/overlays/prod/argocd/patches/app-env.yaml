@@ -82,8 +82,10 @@ spec:
   source:
     path: k8s/infrastructure/overlays/prod/observability/tempo
 ---
-# minio Application is removed from the prod render via a delete patch in
-# overlays/prod/argocd/kustomization.yaml (prod uses real AWS S3, not MinIO).
+# In prod, Velero writes backups directly to AWS S3 (bucket + IAM Role
+# provisioned by terraform/environments/prod, accessed via IRSA), so the
+# in-cluster MinIO Application used in staging is removed from the prod
+# render by the delete patch in overlays/prod/argocd/kustomization.yaml.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

@@ -33,9 +33,11 @@ labels:
 
 patches:
   - path: patches/app-env.yaml
-  # Remove the minio Application from the prod App-of-Apps. Prod Velero
-  # writes to real AWS S3 (overlays/prod/velero/backup-location-patch.yaml),
-  # so the in-cluster MinIO Deployment shipped by base/argocd is unused.
+  # Drop the minio Application from the prod App-of-Apps: prod Velero writes
+  # directly to AWS S3 via IRSA (see overlays/prod/velero/backup-location-patch.yaml
+  # for the BackupStorageLocation, and terraform/environments/prod for the
+  # bucket + IAM Role). The in-cluster MinIO that staging uses as an
+  # S3-compatible store is therefore not deployed in prod.
   - target:
       group: argoproj.io
       version: v1alpha1
