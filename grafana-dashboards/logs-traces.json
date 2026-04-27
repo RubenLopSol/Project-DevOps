@@ -1,15 +1,15 @@
 {
   "annotations": { "list": [] },
-  "description": "Logs (Loki) on top, traces (Tempo) on the bottom — both scoped to the same namespace variable so you can flip between them without losing context. Loki's derivedField extracts traceID into a clickable Tempo link.",
+  "description": "Unified logs & traces view for the selected namespace. Top row gives the at-a-glance health (ingest rate, error rate, warn rate). Logs section is a Loki volume chart plus a live tail with a level filter. Traces section is Tempo, scoped by service.namespace (set via OTEL_RESOURCE_ATTRIBUTES on each app) — that's the attribute the SDK actually emits, not k8s.namespace.name.",
   "editable": true,
   "graphTooltip": 1,
   "id": null,
   "links": [],
-  "tags": ["logs", "traces", "loki", "tempo"],
+  "tags": ["logs", "traces", "loki", "tempo", "observability"],
   "title": "Logs & Traces",
   "uid": "logs-traces",
   "schemaVersion": 38,
-  "version": 1,
+  "version": 2,
   "refresh": "30s",
   "time": { "from": "now-30m", "to": "now" },
   "timepicker": {},
@@ -48,93 +48,173 @@
         "sort": 1
       },
       {
-        "name": "logfilter",
-        "label": "Log filter (regex)",
-        "type": "textbox",
-        "query": "",
-        "current": { "selected": false, "text": "", "value": "" },
-        "hide": 0
-      },
-      {
         "name": "service",
-        "label": "Service (Tempo)",
+        "label": "Service regex (Tempo)",
         "type": "textbox",
-        "query": "",
-        "current": { "selected": false, "text": "", "value": "" },
+        "query": ".*",
+        "current": { "selected": false, "text": ".*", "value": ".*" },
         "hide": 0
       }
     ]
   },
   "panels": [
-    { "type": "row", "id": 100, "title": "Logs", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 } },
+    { "type": "row", "id": 100, "title": "Overview", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 } },
+
+    {
+      "type": "stat",
+      "id": 10,
+      "title": "Log ingest",
+      "description": "Total log lines per second received from the namespace over the last 5m.",
+      "gridPos": { "h": 4, "w": 12, "x": 0, "y": 1 },
+      "datasource": { "type": "loki", "uid": "${ds_loki}" },
+      "targets": [
+        { "expr": "sum(rate({namespace=\"$namespace\"}[5m]))", "refId": "A" }
+      ],
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "auto" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "logs/sec",
+          "decimals": 1,
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "blue", "value": null } ] }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "id": 11,
+      "title": "Error rate",
+      "description": "Lines per second matching /(?i)\\\\b(error|err|fatal|panic)\\\\b/ in the namespace, last 5m. Red whenever > 0 — anything above zero is worth a glance at the log volume chart below.",
+      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 1 },
+      "datasource": { "type": "loki", "uid": "${ds_loki}" },
+      "targets": [
+        { "expr": "sum(rate({namespace=\"$namespace\"} |~ \"(?i)\\\\b(error|err|fatal|panic)\\\\b\" [5m]))", "refId": "A" }
+      ],
+      "options": { "colorMode": "background", "graphMode": "area", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "auto" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "logs/sec",
+          "decimals": 2,
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "red", "value": 0.0001 }
+          ] }
+        }
+      }
+    },
+    { "type": "row", "id": 101, "title": "Logs", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 } },
 
     {
       "type": "timeseries",
       "id": 1,
       "title": "Log volume by level",
-      "description": "Lines per second in the selected namespace, broken down by detected level. A spike of error/warn here is your cue to scroll the live tail below.",
-      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 1 },
+      "description": "Stacked log rate broken down by level. Level is parsed from logfmt-style lines; structured-log apps (logfmt or `level=...` keys) populate this directly. A spike in red/orange is the cue to scroll the live tail. Lines that fail logfmt parsing are dropped from this chart, not the tail.",
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 6 },
       "datasource": { "type": "loki", "uid": "${ds_loki}" },
       "targets": [
-        { "expr": "sum by (level) (rate({namespace=\"$namespace\"} | logfmt | __error__=\"\" [1m]))", "legendFormat": "{{level}}", "refId": "A" }
+        { "expr": "sum by (level) (rate({namespace=\"$namespace\"} | logfmt | __error__=\"\" | level != \"\" [1m]))", "legendFormat": "{{level}}", "refId": "A" }
       ],
-      "fieldConfig": { "defaults": { "custom": { "drawStyle": "bars", "fillOpacity": 60, "stacking": { "mode": "normal" } }, "unit": "logs/s" } },
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "bars", "fillOpacity": 70, "lineWidth": 1, "stacking": { "mode": "normal" } },
+          "unit": "logs/sec"
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "error" },   "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] },
+          { "matcher": { "id": "byName", "options": "ERROR" },   "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] },
+          { "matcher": { "id": "byName", "options": "err" },     "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] },
+          { "matcher": { "id": "byName", "options": "fatal" },   "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "dark-red" } } ] },
+          { "matcher": { "id": "byName", "options": "panic" },   "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "dark-red" } } ] },
+          { "matcher": { "id": "byName", "options": "warn" },    "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } } ] },
+          { "matcher": { "id": "byName", "options": "WARN" },    "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } } ] },
+          { "matcher": { "id": "byName", "options": "warning" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } } ] },
+          { "matcher": { "id": "byName", "options": "info" },    "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } } ] },
+          { "matcher": { "id": "byName", "options": "INFO" },    "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } } ] },
+          { "matcher": { "id": "byName", "options": "debug" },   "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "text" } } ] },
+          { "matcher": { "id": "byName", "options": "DEBUG" },   "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "text" } } ] },
+          { "matcher": { "id": "byName", "options": "trace" },   "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "super-light-blue" } } ] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } }
     },
-    {
-      "type": "logs",
-      "id": 2,
-      "title": "Live tail — errors & warnings",
-      "description": "Lines containing error/warn (case-insensitive) from the selected namespace. Use the logfilter variable to narrow further (Go regex).",
-      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 7 },
-      "datasource": { "type": "loki", "uid": "${ds_loki}" },
-      "targets": [
-        { "expr": "{namespace=\"$namespace\"} |~ \"(?i)error|warn\" |~ \"$logfilter\"", "refId": "A" }
-      ],
-      "options": {
-        "dedupStrategy": "exact",
-        "enableLogDetails": true,
-        "showCommonLabels": false,
-        "showLabels": false,
-        "showTime": true,
-        "sortOrder": "Descending",
-        "wrapLogMessage": true
-      }
-    },
-
-    { "type": "row", "id": 101, "title": "Traces", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 19 } },
+    { "type": "row", "id": 102, "title": "Traces", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 13 } },
 
     {
-      "type": "traces",
+      "type": "table",
       "id": 3,
       "title": "Recent traces",
-      "description": "Most recent traces from Tempo for the selected namespace. Set the `service` variable to filter by service.name (TraceQL); leave blank for all services.",
-      "gridPos": { "h": 14, "w": 24, "x": 0, "y": 20 },
+      "description": "Most recent traces from Tempo, filtered by the OTel resource attribute service.namespace (set on each app via OTEL_RESOURCE_ATTRIBUTES=...,service.namespace=$namespace). Use the 'Service regex (Tempo)' variable to narrow by service.name — default '.*' matches all services in the namespace. Click a Trace ID to open the full waterfall in Explore.",
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 14 },
       "datasource": { "type": "tempo", "uid": "${ds_tempo}" },
       "targets": [
         {
           "queryType": "traceql",
-          "query": "{ resource.k8s.namespace.name=\"$namespace\" && resource.service.name=~\".*$service.*\" }",
+          "query": "{ resource.service.namespace=\"$namespace\" && resource.service.name=~\"$service\" }",
+          "tableType": "traces",
           "limit": 50,
           "refId": "A"
         }
-      ]
+      ],
+      "options": { "showHeader": true, "cellHeight": "sm", "footer": { "show": false } },
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto", "displayMode": "auto" } },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "traceID" },
+            "properties": [
+              { "id": "custom.width", "value": 280 },
+              { "id": "links", "value": [
+                {
+                  "title": "Open trace in Explore",
+                  "url": "/explore?orgId=1&left=%7B%22datasource%22:%22tempo%22,%22queries%22:%5B%7B%22refId%22:%22A%22,%22queryType%22:%22traceql%22,%22query%22:%22${__value.raw}%22%7D%5D,%22range%22:%7B%22from%22:%22now-1h%22,%22to%22:%22now%22%7D%7D",
+                  "targetBlank": true
+                }
+              ] }
+            ]
+          },
+          { "matcher": { "id": "byName", "options": "traceDuration" }, "properties": [ { "id": "unit", "value": "ms" }, { "id": "custom.width", "value": 110 } ] },
+          { "matcher": { "id": "byName", "options": "startTime" },     "properties": [ { "id": "custom.width", "value": 200 } ] }
+        ]
+      }
     },
     {
-      "type": "traces",
+      "type": "table",
       "id": 4,
       "title": "Slow traces (> 1s)",
-      "description": "Same scope as above but filtered to traces with total duration over 1 second — a quick way to spot the worst offenders without leaving the dashboard.",
-      "gridPos": { "h": 14, "w": 24, "x": 0, "y": 34 },
+      "description": "Same scope as Recent traces, narrowed to root spans whose total duration is over 1 second — the quickest way to spot the worst offenders without leaving the dashboard.",
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 26 },
       "datasource": { "type": "tempo", "uid": "${ds_tempo}" },
       "targets": [
         {
           "queryType": "traceql",
-          "query": "{ resource.k8s.namespace.name=\"$namespace\" && resource.service.name=~\".*$service.*\" && duration > 1s }",
+          "query": "{ resource.service.namespace=\"$namespace\" && resource.service.name=~\"$service\" && duration > 1s }",
+          "tableType": "traces",
           "limit": 50,
           "refId": "A"
         }
-      ]
+      ],
+      "options": { "showHeader": true, "cellHeight": "sm", "footer": { "show": false } },
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto", "displayMode": "auto" } },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "traceID" },
+            "properties": [
+              { "id": "custom.width", "value": 280 },
+              { "id": "links", "value": [
+                {
+                  "title": "Open trace in Explore",
+                  "url": "/explore?orgId=1&left=%7B%22datasource%22:%22tempo%22,%22queries%22:%5B%7B%22refId%22:%22A%22,%22queryType%22:%22traceql%22,%22query%22:%22${__value.raw}%22%7D%5D,%22range%22:%7B%22from%22:%22now-1h%22,%22to%22:%22now%22%7D%7D",
+                  "targetBlank": true
+                }
+              ] }
+            ]
+          },
+          { "matcher": { "id": "byName", "options": "traceDuration" }, "properties": [ { "id": "unit", "value": "ms" }, { "id": "custom.width", "value": 110 } ] },
+          { "matcher": { "id": "byName", "options": "startTime" },     "properties": [ { "id": "custom.width", "value": 200 } ] }
+        ]
+      }
     }
   ]
 }

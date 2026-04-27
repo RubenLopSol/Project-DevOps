@@ -13,13 +13,18 @@ singleBinary:
   # Loki needs enough CPU to serve gRPC keepalive pings from the distributor
   # alongside HTTP requests. 100m caused DeadlineExceeded on the internal
   # ingester healthcheck pool, which /ready then reported as 503.
+  # Memory bumped from 512Mi → 1Gi after observing repeated OOMKills under
+  # the dashboard's logfmt+rate queries on high-volume openpanel logs
+  # (~150k lines / 13m window). At 512Mi the ingester hit RSS=limit within
+  # minutes of a panel reload and got SIGKILLed, dropping all ingest until
+  # the pod came back. CPU limit bumped to 1000m to match the parser load.
   resources:
     requests:
-      cpu: 200m
-      memory: 256Mi
-    limits:
-      cpu: 500m
+      cpu: 250m
       memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
 
 # loki-canary runs a DaemonSet (one pod per node = 3 pods in this cluster)
 # that constantly opens websocket tail connections and fires queries.
