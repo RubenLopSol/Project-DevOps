@@ -66,7 +66,7 @@ data "aws_iam_policy_document" "velero_assume_role" {
 }
 
 resource "aws_iam_role" "velero" {
-  name               = "velero-${var.eks_cluster_name}"
+  name               = coalesce(var.role_name, "velero-${var.eks_cluster_name}")
   assume_role_policy = data.aws_iam_policy_document.velero_assume_role.json
 
   tags = var.tags

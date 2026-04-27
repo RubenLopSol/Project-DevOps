@@ -75,6 +75,11 @@ kind: Deployment
 metadata:
   name: local-path-provisioner
   namespace: local-path-storage
+  annotations:
+    # Cluster-wide storage provisioner (Rancher upstream); only egress is to
+    # the kube-apiserver to watch PVCs/PVs. No ingress traffic is routed to
+    # this pod, so a NetworkPolicy adds churn without changing exposure.
+    ignore-check.kube-linter.io/non-isolated-pod: "cluster-wide infra component; talks only to kube-apiserver"
 spec:
   replicas: 1
   selector:

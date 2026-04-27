@@ -1,8 +1,6 @@
 # Staging uses LocalStack — a local Docker container that emulates AWS services
-# at localhost:4566. No real AWS credentials are needed.
-#
-# Start LocalStack before running terraform apply:
-#   docker run -d -p 4566:4566 localstack/localstack
+# at localhost:4566. No real AWS credentials 
+
 provider "aws" {
   region                      = var.aws_region
   access_key                  = "test"

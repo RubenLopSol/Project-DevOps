@@ -4,27 +4,17 @@
 title = "gitleaks config"
 
 [extend]
-# Use the default gitleaks ruleset as the base
 useDefault = true
 
-# Allowlist paths that contain known false positives.
 [allowlist]
 description = "Known false positives"
 paths = [
-  # Helm chart cache — equivalent to node_modules, contains example/dummy keys in READMEs
+  # Vendored Helm charts. Treat like node_modules; READMEs ship example keys.
   '''k8s/.*/charts/.*''',
-  # Upstream OpenPanel source code is a git submodule — it is never committed here.
-  # This path is kept as a safety net in case the submodule contents were ever
-  # temporarily committed (e.g. during migration). Mock data, test fixtures, and
-  # API documentation examples contain fake client secrets / project IDs — not real credentials.
-  '''openpanel/.*''',
 ]
 
-# Commits containing known false positives.
-# Each entry documents WHY it is allowlisted so future reviewers can verify.
+# Allowlisted commits. Each one needs a one-line reason.
 commits = [
-  # docs/exploracion-stack-local.md — example curl commands using local Docker Compose
-  # client-id and client-secret. These are test credentials that only work against
-  # a local instance; the file was later removed. Not real/production secrets.
+  # Local-stack exploration doc with throwaway compose creds. File later removed.
   "43e162d901d753024eb52073558fc7e19d146d2b",
 ]
