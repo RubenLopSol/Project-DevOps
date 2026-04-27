@@ -33,8 +33,7 @@ labels:
 
 patches:
   - path: patches/app-env.yaml
-  # Drop the minio Application from the prod App-of-Apps: prod Velero writes
-  # directly to AWS S3 via IRSA (see overlays/prod/velero/backup-location-patch.yaml
+  # Velero writes directly to AWS S3 via IRSA (see overlays/prod/velero/backup-location-patch.yaml
   # for the BackupStorageLocation, and terraform/environments/prod for the
   # bucket + IAM Role). The in-cluster MinIO that staging uses as an
   # S3-compatible store is therefore not deployed in prod.
