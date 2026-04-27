@@ -115,9 +115,6 @@ check_env_file() {
 
 check_hosts_entry() {
   step "/etc/hosts has host.docker.internal"
-  # Dashboard auth cookies are scoped to host.docker.internal on Linux so the
-  # API (running in a container) and the dashboard (running in the browser)
-  # see the same hostname. Without this mapping, login silently fails.
   if ! grep -qE '^[^#]*\bhost\.docker\.internal\b' /etc/hosts; then
     die "host.docker.internal missing from /etc/hosts — run: echo '127.0.0.1 host.docker.internal' | sudo tee -a /etc/hosts"
   fi
@@ -133,10 +130,6 @@ check_jq_installed() {
 }
 
 check_sibling_fork() {
-  # The OpenPanel application source lives in a separate git repo cloned as
-  # a sibling of this one (two-repo GitOps layout). Compose's build contexts
-  # reference `../openpanel/...` paths, so a missing sibling = cryptic build
-  # errors. Fail fast here with the exact clone command instead.
   step "sibling openpanel fork at ../openpanel"
   local fork_dir="../openpanel"
   local required=(

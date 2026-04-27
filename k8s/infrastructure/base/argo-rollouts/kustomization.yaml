@@ -1,6 +1,3 @@
-# Argo Rollouts controller via upstream Helm. Pinned at 2.39.5 (last version
-# known-good against k8s 1.28). includeCRDs: true bundles the Rollout /
-# Analysis* / Experiment CRDs so a single sync brings everything up.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 

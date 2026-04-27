@@ -8,7 +8,7 @@ metadata:
 spec:
   # serviceName has to point at a Service with the same selector. Kept as
   # ClusterIP (not headless) to match postgres / clickhouse — with replicas=1
-  # consumers just hit `redis:6379` and we don't need per-pod DNS.
+  # consumers just hit `redis:6379`.
   serviceName: redis
   replicas: 1
   selector:
@@ -19,7 +19,6 @@ spec:
       labels:
         app: redis
       annotations:
-        # Scraping is handled by the redis-exporter ServiceMonitor; annotation disabled to avoid duplicates.
         prometheus.io/scrape: "false"
     spec:
       securityContext:
@@ -32,9 +31,7 @@ spec:
         # Minikube's hostpath provisioner (and local-path on some nodes)
         # creates the PV directory as root:root and ignores fsGroup. Redis
         # runs as UID 999 with a read-only root filesystem, so it can't
-        # chown /data itself — RDB writes blow up with "Permission denied"
-        # and the worker piles up MISCONF errors. Same trick as the
-        # /var/run fix in postgres.
+        # chown /data itself 
         - name: fix-permissions
           image: busybox:1.36.1
           command: ['sh', '-c', 'chown -R 999:999 /data && chmod 0700 /data']
@@ -117,8 +114,7 @@ spec:
             allowPrivilegeEscalation: false
             # RDB dumps and AOF land on the PVC at /data. Redis also
             # writes a tempfile during dump rotation (also under /data,
-            # not /tmp). /tmp is an emptyDir just in case Lua script
-            # caching or some maintenance command decides to touch it.
+            # not /tmp). 
             readOnlyRootFilesystem: true
             capabilities:
               drop:
@@ -132,9 +128,7 @@ spec:
         - name: tmp
           emptyDir: {}
   # One PVC per ordinal — StatefulSet creates `redis-data-redis-0` on the
-  # first sync. Heads up: switching from the old Deployment + standalone
-  # PVC setup does NOT migrate any data; the previous `redis-data` PVC
-  # gets orphaned. Doesn't affect fresh clusters.
+  # first sync. 
   volumeClaimTemplates:
     - metadata:
         name: redis-data

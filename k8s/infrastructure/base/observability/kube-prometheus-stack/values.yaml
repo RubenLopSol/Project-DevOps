@@ -1,15 +1,3 @@
-# =============================================================================
-# kube-prometheus-stack — Helm values
-#
-# This release now ships ONLY: prometheus-operator + CRDs + Prometheus +
-# node-exporter + kube-state-metrics. Grafana and Alertmanager are deployed
-# as their own ArgoCD Applications from sibling charts:
-#   k8s/infrastructure/base/observability/grafana
-#   k8s/infrastructure/base/observability/alertmanager
-#
-# Chart: prometheus-community/kube-prometheus-stack
-# =============================================================================
-
 # ----------------------------------------------------------------------------
 # Prometheus
 # ----------------------------------------------------------------------------
@@ -30,16 +18,7 @@ prometheus:
       limits:
         cpu: "1"
         memory: 1Gi
-
-    # Route alerts to the standalone alertmanager Application (sibling chart).
-    # The prometheus-community/alertmanager chart creates a Service named
-    # `alertmanager` on port `http` (9093) in the observability namespace.
-    #
-    # Use `alertingEndpoints` (not `alerting.alertmanagers`): the chart only
-    # renders Prometheus' `spec.alerting` block when either
-    # `alertmanager.enabled` is true or `prometheusSpec.alertingEndpoints` is
-    # set. We've disabled the bundled Alertmanager, so this is the path that
-    # actually wires Prometheus to the standalone instance.
+## AlertManager
     alertingEndpoints:
       - namespace: observability
         name: alertmanager
@@ -73,14 +52,13 @@ prometheus:
             action: replace
             target_label: pod
 
-# Reglas de alerta personalizadas
+
 additionalPrometheusRulesMap:
   openpanel-alerts:
     groups:
       - name: openpanel-alerts
         rules:
           - alert: APIDown
-            # Matches the ServiceMonitor job name: openpanel/openpanel-api
             expr: up{job="openpanel-api",namespace="openpanel"} == 0
             for: 2m
             labels:
@@ -90,8 +68,6 @@ additionalPrometheusRulesMap:
               description: "OpenPanel API has been unreachable for more than 2 minutes."
 
           - alert: HighErrorRate
-            # http_request_duration_seconds is the metric from prom-client with labels
-            # method, route, status_code. Count 5xx rate vs total.
             expr: >
               sum(rate(http_request_duration_seconds_count{status_code=~"5..",namespace="openpanel"}[5m])) by (job)
               /
@@ -105,7 +81,6 @@ additionalPrometheusRulesMap:
               description: "HTTP 5xx error rate above 5% for more than 5 minutes."
 
           - alert: APIHighLatency
-            # P99 latency above 2 seconds for 5 minutes
             expr: >
               histogram_quantile(0.99,
                 sum(rate(http_request_duration_seconds_bucket{namespace="openpanel"}[5m])) by (job, le)
@@ -118,7 +93,6 @@ additionalPrometheusRulesMap:
               description: "P99 request latency is above 2s for more than 5 minutes."
 
           - alert: NodeJSEventLoopLag
-            # Event loop lag above 500ms means the JS thread is saturated
             expr: nodejs_eventloop_lag_p99_seconds{namespace="openpanel"} > 0.5
             for: 5m
             labels:
@@ -141,10 +115,6 @@ additionalPrometheusRulesMap:
               description: "Memory usage above 90% of the configured limit."
 
           - alert: PostgresDown
-            # Job label is derived from the Service name (`postgres`), not the
-            # ServiceMonitor name. The Service exposes both 5432/postgres and
-            # 9187/postgres-exporter on the same Pod, so a single `up` series
-            # covers liveness of the exporter target.
             expr: up{job="postgres",namespace="openpanel"} == 0
             for: 2m
             labels:
@@ -154,8 +124,6 @@ additionalPrometheusRulesMap:
               description: "Postgres has been unreachable for more than 2 minutes. Login, user data, and dashboard reads are failing."
 
           - alert: RedisDown
-            # Job label is derived from the Service name (`redis`), not the
-            # ServiceMonitor name.
             expr: up{job="redis",namespace="openpanel"} == 0
             for: 2m
             labels:
@@ -164,10 +132,7 @@ additionalPrometheusRulesMap:
               summary: "Redis is unreachable"
               description: "Redis has been unreachable for more than 2 minutes. Tracking events cannot be queued and the worker has nothing to process."
 
-  # Self-monitoring for the standalone Alertmanager Application. Replaces the
-  # kube-prometheus-stack-bundled `alertmanager.rules` group (disabled below
-  # via defaultRules.rules.alertmanager). job="alertmanager" matches the
-  # ServiceMonitor created by k8s/infrastructure/base/observability/alertmanager.
+
   alertmanager-self:
     groups:
       - name: alertmanager-self
@@ -197,34 +162,15 @@ additionalPrometheusRulesMap:
               summary: "Alertmanager is failing to send notifications"
               description: "Integration {{ $labels.integration }} is failing for {{ $labels.namespace }}/{{ $labels.pod }}."
 
-# ----------------------------------------------------------------------------
-# Grafana — disabled here, deployed as its own ArgoCD Application from
-# k8s/infrastructure/base/observability/grafana (grafana/grafana chart).
-#
-# `forceDeployDashboards: false` suppresses the chart's 24 bundled dashboard
-# ConfigMaps (kubernetes-*, etcd, alertmanager-overview, etc.). Only the
-# three repo-curated dashboards (cluster, openpanel, logs-traces) are
-# rendered as ConfigMaps via the standalone grafana kustomization.
-# ----------------------------------------------------------------------------
+
 grafana:
   enabled: false
   forceDeployDashboards: false
 
 # ----------------------------------------------------------------------------
-# AlertManager — disabled here, deployed as its own ArgoCD Application from
-# k8s/infrastructure/base/observability/alertmanager (prometheus-community
-# /alertmanager chart). Prometheus is wired to it via prometheus.alerting
-# above.
-# ----------------------------------------------------------------------------
 alertmanager:
   enabled: false
 
-# ----------------------------------------------------------------------------
-# Default rules — disable the alertmanager.rules group. Those rules query
-# metrics from the in-chart `kube-prometheus-stack-alertmanager` target
-# which no longer exists; firing them produces false `AlertmanagerDown`
-# noise. Equivalent rules pointed at the standalone target live alongside
-# the alertmanager chart values.
 # ----------------------------------------------------------------------------
 defaultRules:
   rules:
@@ -233,25 +179,11 @@ defaultRules:
 # ----------------------------------------------------------------------------
 # prometheus-operator
 # ----------------------------------------------------------------------------
-# Admission webhooks are disabled because the cert-generation Job they need
-# (kube-prometheus-stack-admission-create) is run as an ArgoCD Sync hook,
-# and ArgoCD's application-controller has a known watch-event race that can
-# leave it sitting on `hookPhase: Running` for several minutes after the Job
-# actually completed — blocking every downstream Application that needs the
-# ServiceMonitor / PrometheusRule CRDs.
-#
-# What we lose: server-side validation of malformed Prometheus / AlertManager
-# / ServiceMonitor CRs at creation time. We don't need it: every CR in this
-# repo is rendered + validated by ci-validate.yml (kubeconform) before it
-# ever reaches the cluster, so the webhook would only catch ad-hoc kubectl
-# applies, which we don't do here.
 prometheusOperator:
   admissionWebhooks:
     enabled: false
     patch:
       enabled: false
-  # Without webhooks the operator no longer needs TLS — drop the whole TLS
-  # block so the operator starts cleanly.
   tls:
     enabled: false
 

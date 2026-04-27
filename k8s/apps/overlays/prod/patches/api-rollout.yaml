@@ -1,9 +1,3 @@
-# Prod tweaks for the openpanel-api Rollout: 3 replicas for HA, plus the
-# OTEL deployment.environment=prod tag for traces.
-#
-# JSON 6902 patch (not strategic merge) because kustomize has no schema
-# for argoproj.io/Rollout — strategic merge would replace the containers
-# list instead of merging by name and wipe out the base container fields.
 - op: replace
   path: /spec/replicas
   value: 3

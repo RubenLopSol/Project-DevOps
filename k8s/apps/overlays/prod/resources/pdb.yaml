@@ -3,7 +3,6 @@
 # ReplicaSets (they share app: openpanel-api) so it protects total capacity,
 # not a single revision.
 #
-# Prod-only: on a 1-node dev cluster minAvailable: 1 would block drains.
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:

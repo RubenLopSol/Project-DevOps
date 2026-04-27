@@ -1,14 +1,3 @@
-# =============================================================================
-# Sealed Secrets Controller — Helm values
-#
-# Chart: sealed-secrets/sealed-secrets  (version: 2.16.1)
-# Docs:  https://github.com/bitnami-labs/sealed-secrets/tree/main/helm/sealed-secrets
-#
-# Rendered via helmChartInflationGenerator — applied through the env overlay:
-#   kustomize build --enable-helm k8s/infrastructure/overlays/staging/sealed-secrets | kubectl apply -f -
-#   kustomize build --enable-helm k8s/infrastructure/overlays/prod/sealed-secrets   | kubectl apply -f -
-# =============================================================================
-
 # ---- Controller ----
 fullnameOverride: sealed-secrets
 
@@ -35,7 +24,7 @@ nodeSelector:
 # Expose a /metrics endpoint so Prometheus can scrape controller health.
 metrics:
   serviceMonitor:
-    enabled: false   # set true if kube-prometheus-stack is already installed
+    enabled: false   
   service:
     port: 8081
 

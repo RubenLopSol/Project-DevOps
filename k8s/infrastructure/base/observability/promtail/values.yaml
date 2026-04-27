@@ -1,14 +1,3 @@
-# =============================================================================
-# Promtail — Helm values
-# Chart: grafana/promtail
-# Recoge logs de todos los pods y los envía a Loki
-#
-# NOTE: No nodeSelector here — intentional.
-# Promtail is a DaemonSet: it must run on EVERY node to collect logs from
-# all pods regardless of which node group they belong to. Adding a nodeSelector
-# would cause Promtail to miss logs from pods on the app node.
-# =============================================================================
-
 config:
   clients:
     - url: http://loki-gateway.observability.svc.cluster.local/loki/api/v1/push

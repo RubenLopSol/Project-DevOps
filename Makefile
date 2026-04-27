@@ -84,7 +84,6 @@ fail    = @echo -e "$(COLOR_ERROR)$(COLOR_BOLD)   ✖  $(1)$(COLOR_NONE)" >&2
 # help
 #
 # Lists all available commands with a short description.
-# This is what you see when you run `make` on its own.
 # =============================================================================
 help:
 	@echo ""
@@ -122,14 +121,12 @@ help:
 # =============================================================================
 # bootstrap
 #
-# One-time host setup for a fresh checkout. Idempotent — safe to re-run.
+# One-time host setup for a fresh checkout.
 #
 # Handles the three manual prerequisites the preflight check looks for:
 #   1. .env           — copied from .env.example if missing (fill in secrets after)
 #   2. /etc/hosts     — appends host.docker.internal mapping if absent (needs sudo)
 #   3. ../openpanel   — clones the sibling app fork if not already present
-#
-# Preflight stays diagnostic-only on purpose; this target is the "fix it" half.
 # =============================================================================
 bootstrap:
 	$(call header,Bootstrapping host for local development)
@@ -166,14 +163,13 @@ bootstrap:
 # =============================================================================
 # preflight
 #
-# Quick sanity check on the host before docker compose runs. Cheaper to fail
-# here than halfway through a build.
+# Quick sanity check on the host before docker compose runs.
 #
 # What it looks at:
 #   - Docker daemon is reachable
 #   - Docker engine v24 or newer
 #   - docker compose plugin v2.20 or newer
-#   - .env exists (it won't fill it in for you)
+#   - .env exists 
 #   - /etc/hosts has host.docker.internal — the dashboard's auth cookies
 #     don't work without it
 #   - jq is on PATH
@@ -258,8 +254,8 @@ dev-down:
 #
 # Provisions all cloud infrastructure from scratch. Before creating anything,
 # it checks that the required tools are available, starts LocalStack when
-# targeting staging, shows you the full Terraform plan and asks for your
-# confirmation. Nothing is created until you explicitly say yes.
+# targeting staging, shows the full Terraform plan and asks for the
+# confirmation. Nothing is created without explicit approval.
 #
 # Steps:
 #   1. Check Terraform is installed
@@ -297,7 +293,7 @@ terraform-infra:
 	fi
 	@echo -e "   $(COLOR_SUCCESS)✔  $$(docker --version)$(COLOR_NONE)"
 
-	$(call step,Starting LocalStack — your local AWS simulator)
+	$(call step,Starting LocalStack — local AWS simulator)
 	@if [ "$(ENV)" = "staging" ]; then \
 		if curl -sf http://localhost:4566/_localstack/health &>/dev/null; then \
 			echo -e "   $(COLOR_SUCCESS)✔  LocalStack is already running at localhost:4566$(COLOR_NONE)"; \
@@ -344,8 +340,6 @@ terraform-infra:
 # terraform-status
 #
 # Lists every resource that Terraform is currently tracking in its state file.
-# Use this after provisioning to confirm everything was created, or any time
-# you want a quick overview of what exists in a given environment.
 # =============================================================================
 terraform-status:
 	$(call header,Terraform resource status — environment: $(ENV))
@@ -368,8 +362,7 @@ terraform-status:
 # terraform-destroy
 #
 # Permanently destroys all resources Terraform manages in the target
-# environment. This cannot be undone. You will be asked to confirm
-# before anything is deleted.
+# environment.
 # =============================================================================
 terraform-destroy:
 	$(call header,Destroying infrastructure — environment: $(ENV))
@@ -477,9 +470,9 @@ cluster-up:
 # against the sealed-secrets controller's current public key, then
 # applies them live.
 #
-# Use this after 'make cluster-up' only if you skipped the automatic
-# re-seal, after a manual 'kubectl rollout restart' of the controller,
-# or any other time you've seen pods stuck Pending on a missing Secret.
+# Use after 'make cluster-up' only when the automatic re-seal was skipped,
+# after a manual 'kubectl rollout restart' of the controller, or any time
+# pods are stuck Pending on a missing Secret.
 # =============================================================================
 reseal:
 	@bash scripts/reseal-secrets.sh

@@ -1,15 +1,3 @@
-# =============================================================================
-# Loki — PROD overrides
-# Merged on top of k8s/infrastructure/base/observability/loki/values.yaml
-#
-# Prod uses S3 for log storage instead of filesystem.
-# SingleBinary mode with filesystem cannot scale beyond 1 replica — Loki's
-# chart validation rejects replicas > 1 with filesystem storage.
-# S3 backend enables HA with multiple replicas.
-#
-# Authentication via IRSA — no access keys needed, pod identity provides creds.
-# =============================================================================
-
 loki:
   storage:
     type: s3

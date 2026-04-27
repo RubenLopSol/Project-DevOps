@@ -3,7 +3,6 @@
 # Chart: grafana/loki
 # =============================================================================
 
-# Modo simple para entorno local (single binary)
 deploymentMode: SingleBinary
 
 loki:
@@ -59,7 +58,6 @@ singleBinary:
       cpu: 500m
       memory: 512Mi
 
-# Desactivar componentes de modo distribuido (no necesarios en local)
 read:
   replicas: 0
 write:

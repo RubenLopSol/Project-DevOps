@@ -1,7 +1,4 @@
 # ArgoCD prod Helm values — real AWS EKS
-#
-# Merged on top of base/argocd/install/values.yaml by the helmCharts entry
-# in overlays/prod/argocd/kustomization.yaml.
 
 server:
   # TLS terminated at ingress with cert-manager — ArgoCD runs in insecure mode

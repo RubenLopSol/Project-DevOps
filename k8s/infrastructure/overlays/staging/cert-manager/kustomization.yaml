@@ -1,14 +1,3 @@
-# =============================================================================
-# cert-manager — STAGING overlay
-#
-# Renders the controller Helm chart and applies the self-signed ClusterIssuer
-# in one pass. Kustomize cannot merge helmCharts blocks from base, so the full
-# chart spec is re-declared here pointing valuesFile at the base values.
-#
-# Standalone deploy:
-#   kustomize build --enable-helm k8s/infrastructure/overlays/staging/cert-manager | kubectl apply -f -
-# =============================================================================
-
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 

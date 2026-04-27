@@ -1,13 +1,7 @@
-# Base Helm values for argo-rollouts. Shared across staging and prod;
-# overlays only override the bits that actually differ.
-
 controller:
-  # Same workload=app pool we use for the rest of the app-side controllers
-  # (cert-manager etc).
   nodeSelector:
     workload: app
 
-  # Idle most of the time. Bump if a busy cluster starts throttling.
   resources:
     requests:
       cpu: 50m
@@ -16,7 +10,7 @@ controller:
       cpu: 200m
       memory: 256Mi
 
-  # 2 for leader election. Drop to 1 on memory-tight clusters.
+
   replicas: 2
 
   metrics:

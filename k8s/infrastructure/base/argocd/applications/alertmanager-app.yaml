@@ -15,7 +15,7 @@ spec:
   source:
     repoURL: https://github.com/RubenLopSol/Project-DevOps.git
     targetRevision: main
-    # Set by overlays/*/argocd/patches/app-env.yaml — never hardcoded here
+    # Set by overlays/*/argocd/patches/app-env.yaml 
     path: PLACEHOLDER
     kustomize: {}
   destination:
@@ -27,9 +27,6 @@ spec:
       selfHeal: true
     syncOptions:
       - ServerSideApply=true
-      # Compute diffs server-side so Kubernetes default-value injection on
-      # StatefulSet (podManagementPolicy, updateStrategy, probe defaults,
-      # zero-valued minReadySeconds) doesn't show as permanent drift.
       - ServerSideDiff=true
     retry:
       limit: 5

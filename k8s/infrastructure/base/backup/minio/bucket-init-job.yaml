@@ -6,7 +6,6 @@
 #
 # Runs as a PostSync hook so it fires AFTER the MinIO Deployment is healthy.
 # HookDeletePolicy=BeforeHookCreation lets it re-run cleanly on every sync;
-# `mc mb --ignore-existing` makes the body idempotent so re-runs are no-ops.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -15,8 +14,6 @@ metadata:
   annotations:
     argocd.argoproj.io/hook: PostSync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
-    # Same waiver as the minio Deployment — short-lived PostSync hook in the
-    # staging-only `backup` namespace; no cross-namespace ingress to isolate.
     ignore-check.kube-linter.io/non-isolated-pod: "staging-only PostSync hook; not deployed to prod"
 spec:
   ttlSecondsAfterFinished: 300

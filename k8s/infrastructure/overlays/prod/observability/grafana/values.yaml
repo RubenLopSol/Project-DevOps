@@ -1,6 +1,5 @@
 # =============================================================================
 # Grafana — PROD overrides.
-# Merged on top of base/observability/grafana/values.yaml.
 # =============================================================================
 
 replicas: 2
@@ -15,8 +14,8 @@ resources:
 
 ingress:
   hosts:
-    - grafana.yourdomain.com   # replace with real domain
+    - grafana.<DOMAIN>.com   # replace with real domain
   tls:
     - secretName: grafana-tls
       hosts:
-        - grafana.yourdomain.com
+        - grafana.<DOMAIN>.com  # replace with real domain

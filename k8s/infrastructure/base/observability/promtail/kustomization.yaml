@@ -1,16 +1,3 @@
-# =============================================================================
-# Promtail — base chart definition
-#
-# Chart:   grafana/promtail
-# Version: 6.16.4
-# Mode:    DaemonSet — runs on every node, no nodeSelector
-#
-# No environment overrides needed — same values in staging and prod.
-#
-# Standalone deploy:
-#   kustomize build --enable-helm k8s/infrastructure/base/observability/promtail | kubectl apply -f -
-# =============================================================================
-
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 

@@ -15,17 +15,12 @@ spec:
   source:
     repoURL: https://github.com/RubenLopSol/Project-DevOps.git
     targetRevision: main
-    # Set by overlays/*/argocd/patches/app-env.yaml — never hardcoded here
+    # Set by overlays/*/argocd/patches/app-env.yaml 
     path: PLACEHOLDER
     kustomize: {}
   destination:
     server: https://kubernetes.default.svc
     namespace: observability
-  # The upstream tempo chart omits `protocol: TCP` on TCP container ports.
-  # ServerSideApply uses (name, protocol) as the composite key, so SSA can't
-  # diff them. We stick with client-side apply (no ServerSideApply syncOption)
-  # and ignore the immutable volumeClaimTemplates field, which Kubernetes
-  # forbids changing once the StatefulSet exists.
   ignoreDifferences:
     - group: apps
       kind: StatefulSet

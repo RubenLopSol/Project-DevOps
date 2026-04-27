@@ -1,13 +1,3 @@
-# =============================================================================
-# Promtail — STAGING overlay
-#
-# No staging-specific overrides — values.yaml is intentionally empty.
-# Structure mirrors other charts for consistency.
-#
-# Standalone build:
-#   kustomize build --enable-helm k8s/infrastructure/overlays/staging/observability/promtail
-# =============================================================================
-
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 

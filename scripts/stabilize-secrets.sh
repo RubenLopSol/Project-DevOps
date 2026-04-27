@@ -12,18 +12,6 @@
 #      case on a repeat bring-up, where ensure-sealing-key.sh put the
 #      same key back that the SealedSecrets in git were sealed against.
 #
-#   3. If any of them can't decrypt — typical first-run for a reviewer
-#      who just generated a fresh key — fix it automatically:
-#         a. Turn off selfHeal on the `bootstrap` and `sealed-secrets`
-#            apps so ArgoCD doesn't revert us back to git's stale
-#            ciphertext.
-#         b. Re-run reseal-secrets.sh to re-encrypt the .env values
-#            against THIS cluster's key, then apply with kubectl.
-#         c. Print clear next-steps for re-enabling selfHeal once you're
-#            happy and ready to commit the regenerated secrets.yaml.
-#
-# Idempotent — safe to run as many times as you like.
-#
 # Usage:
 #   ./scripts/stabilize-secrets.sh
 # =============================================================================
@@ -82,7 +70,6 @@ until [ "$(kubectl get sealedsecret -A --no-headers 2>/dev/null | wc -l)" -ge 6 
   sleep 5
 done
 
-# Give the controller a moment to attempt decryption of whatever's there now.
 sleep 8
 
 # -----------------------------------------------------------------------------
@@ -114,7 +101,7 @@ for ns_name in "${SEALED_SECRETS[@]}"; do
 done
 
 # -----------------------------------------------------------------------------
-# 4. Steady-state path — nothing to do
+# 4. Steady-state path 
 # -----------------------------------------------------------------------------
 if [ "${errors}" -eq 0 ] && [ "${missing}" -eq 0 ]; then
   echo ""
@@ -134,7 +121,6 @@ echo "      generated a fresh key for this machine. Auto-resealing now."
 echo ""
 
 echo -e "${YELLOW}   →  Disabling selfHeal on bootstrap + sealed-secrets so ArgoCD does not revert${RESET}"
-# Wait for the apps to exist (they may not yet on a brand-new install).
 attempts=0
 until kubectl -n argocd get application bootstrap >/dev/null 2>&1 && \
       kubectl -n argocd get application sealed-secrets >/dev/null 2>&1; do

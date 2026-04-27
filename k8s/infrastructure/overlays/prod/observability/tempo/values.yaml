@@ -1,5 +1,4 @@
 # =============================================================================
 # Tempo — PROD overrides
-# Merged on top of k8s/infrastructure/base/observability/tempo/values.yaml
-# No prod-specific overrides needed — base values fit all environments.
+# No prod-specific overrides needed 
 # =============================================================================

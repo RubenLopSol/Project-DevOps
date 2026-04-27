@@ -6,25 +6,14 @@
 #
 #   1. Backup exists at ~/.config/openpanel/sealing-key.yaml
 #      → apply it to the cluster. This is the repeat-bring-up case — the
-#        script has run here before and we're just putting the same key
+#        script has run here before and is just putting the same key
 #        back.
 #
 #   2. No backup
 #      → generate a fresh RSA-4096 keypair locally with openssl, install
 #        it as a Kubernetes Secret with the label the controller looks
 #        for, and save a copy to ~/.config/openpanel/sealing-key.yaml so
-#        the next bring-up takes path 1. This is the thesis-reviewer
-#        first-run case.
-#
-# Why bother:
-#   By default the sealed-secrets controller generates a brand-new keypair
-#   every time it's installed. That's a problem for GitOps — every
-#   SealedSecret already committed to git was encrypted against the OLD
-#   cluster's key, so the new cluster can't decrypt any of them. Pinning
-#   the keypair before the controller starts makes cluster bring-ups
-#   reproducible without shipping a private key in git.
-#
-# Idempotent — safe to run as many times as you like.
+#        the next bring-up takes path 1. 
 #
 # Has to run between setup-minikube.sh (creates the namespace) and
 # install-argocd.sh (spins up the controller via ArgoCD).
@@ -40,7 +29,7 @@ BACKUP_FILE="${BACKUP_DIR}/sealing-key.yaml"
 NAMESPACE="sealed-secrets"
 SECRET_NAME="sealed-secrets-key-bootstrap"
 CN="sealed-secret/O=sealed-secret"
-KEY_DAYS=3650   # 10 years — this is a master key, not a TLS cert
+KEY_DAYS=3650   # 10 years — a master key
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -52,8 +41,6 @@ RESET='\033[0m'
 mkdir -p "${BACKUP_DIR}"
 chmod 700 "${BACKUP_DIR}"
 
-# Make sure the namespace exists. setup-minikube.sh creates it earlier in the
-# pipeline, but this script may be run standalone, so be defensive.
 kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
 # -----------------------------------------------------------------------------

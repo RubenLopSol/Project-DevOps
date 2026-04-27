@@ -105,8 +105,6 @@ spec:
               value: "http/protobuf"
             - name: OTEL_SERVICE_NAME
               value: "openpanel-api"
-            # OTEL_RESOURCE_ATTRIBUTES (deployment.environment=...) is added by
-            # each overlay so the env tag is always correct per cluster.
             - name: OTEL_TRACES_SAMPLER
               value: "always_on"
             - name: OTEL_LOG_LEVEL

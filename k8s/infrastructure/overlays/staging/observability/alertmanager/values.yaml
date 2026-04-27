@@ -1,5 +1,5 @@
 # =============================================================================
-# Alertmanager — STAGING overrides (Minikube-sized).
+# Alertmanager — STAGING overrides.
 # =============================================================================
 
 resources:

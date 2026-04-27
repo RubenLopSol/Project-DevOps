@@ -1,13 +1,3 @@
-# =============================================================================
-# STAGING overlay — ArgoCD
-#
-# Renders ArgoCD Helm chart with staging values (argocd.local, small resources)
-# and includes all Application CRs and the AppProject tagged environment=staging.
-# patches/app-env.yaml sets all env-specific Application CR paths to staging.
-#
-# Install: ./scripts/install-argocd.sh staging
-# Build:   kustomize build --enable-helm k8s/infrastructure/overlays/staging/argocd
-# =============================================================================
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -26,9 +16,6 @@ helmCharts:
       - values.yaml
     includeCRDs: true
 
-# Add environment label to all resources (Application CRs + ArgoCD components).
-# includeSelectors: false — labels are added to metadata only, not to
-# spec.selector, avoiding conflicts with Helm's own selector labels.
 labels:
   - pairs:
       environment: staging

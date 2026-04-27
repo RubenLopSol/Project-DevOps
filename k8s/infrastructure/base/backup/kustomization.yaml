@@ -1,15 +1,3 @@
-# =============================================================================
-# Base — backup stack aggregator
-#
-# Combines MinIO (in-cluster S3-compatible storage) and Velero (backup CRDs)
-# into one deployable unit. Each sub-component also has its own kustomization
-# for independent deployment or testing.
-#
-# Standalone deploy:
-#   kustomize build k8s/infrastructure/base/backup | kubectl apply -f -
-#   kustomize build k8s/infrastructure/base/backup/minio | kubectl apply -f -
-#   kustomize build k8s/infrastructure/base/backup/velero | kubectl apply -f -
-# =============================================================================
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
