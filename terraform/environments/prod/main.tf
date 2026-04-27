@@ -4,7 +4,7 @@ module "backup_storage" {
   bucket_name                 = var.bucket_name
   retention_days              = var.retention_days
   sealed_secrets_secret_name  = var.sealed_secrets_secret_name
-  secret_recovery_window_days = 30 # Longer recovery window for production secrets
+  secret_recovery_window_days = 30
 
   tags = {
     Project     = "openpanel"
@@ -22,9 +22,7 @@ module "velero_iam" {
   velero_service_account = var.velero_service_account
 
   # Pinned name so the IRSA annotation on Velero's ServiceAccount (set in
-  # k8s/infrastructure/overlays/prod/velero-operator/values.yaml) and the
-  # runbook in k8s/infrastructure/base/backup/README.md don't drift away
-  # from what Terraform actually creates.
+  # k8s/infrastructure/overlays/prod/velero-operator/values.yaml).
   role_name = "velero-prod-role"
 
   tags = {
