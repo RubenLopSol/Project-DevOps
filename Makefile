@@ -275,7 +275,7 @@ terraform-infra:
 		echo -e "     Get it from: https://developer.hashicorp.com/terraform/install" >&2; \
 		exit 1; \
 	fi
-	@TF_VER=$$(terraform version -json | grep -o '"terraform_version":"[^"]*"' | cut -d'"' -f4); \
+	@TF_VER=$$(terraform version -json | grep -oE '"terraform_version": *"[^"]*"' | cut -d'"' -f4); \
 	TF_MAJOR=$$(echo "$$TF_VER" | cut -d. -f1); \
 	TF_MINOR=$$(echo "$$TF_VER" | cut -d. -f2); \
 	if [[ "$$TF_MAJOR" -lt $(TF_MIN_MAJOR) ]] || { [[ "$$TF_MAJOR" -eq $(TF_MIN_MAJOR) ]] && [[ "$$TF_MINOR" -lt $(TF_MIN_MINOR) ]]; }; then \

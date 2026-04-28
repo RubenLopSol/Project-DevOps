@@ -33,11 +33,13 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 RESET='\033[0m'
 
-header()  { echo -e "\n${CYAN}${BOLD}=== $* ===${RESET}"; }
-step()    { echo -e "${YELLOW}--- $* ---${RESET}"; }
-success() { echo -e "${GREEN}${BOLD}✔ $*${RESET}"; }
+# Chrome goes to stderr so functions like wait_for_pod can return data
+# on stdout via $(...) without it being polluted by progress messages.
+header()  { echo -e "\n${CYAN}${BOLD}=== $* ===${RESET}" >&2; }
+step()    { echo -e "${YELLOW}--- $* ---${RESET}" >&2; }
+success() { echo -e "${GREEN}${BOLD}✔ $*${RESET}" >&2; }
 error()   { echo -e "${RED}${BOLD}✖ ERROR: $*${RESET}" >&2; }
-info()    { echo -e "  $*"; }
+info()    { echo -e "  $*" >&2; }
 
 # -----------------------------------------------------------------------------
 # Prerequisite checks

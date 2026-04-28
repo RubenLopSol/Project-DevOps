@@ -25,6 +25,10 @@ kind: Rollout
 metadata:
   name: openpanel-api
   namespace: openpanel
+  annotations:
+    # sync-wave 10 — runs after the migrate-job hook (wave 5).
+    # With wave 10 the rollout only starts after migrations
+    argocd.argoproj.io/sync-wave: "10"
   labels:
     app: openpanel-api
 spec:

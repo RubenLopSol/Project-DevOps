@@ -17,7 +17,7 @@ El proyecto incluye:
 
 Este repositorio contiene únicamente la parte de infraestructura. La propia aplicación OpenPanel vive en un fork separado en [`RubenLopSol/openpanel`](https://github.com/RubenLopSol/openpanel) y se clona como directorio hermano del actual.
 
-```
+```yaml
 parent/
 ├── Project-DevOps/      ← este repositorio (infra + GitOps)
 └── openpanel/           ← clonado como hermano por `make bootstrap`
@@ -33,7 +33,7 @@ El fork tiene su propio pipeline en GitHub Actions. Cuando algo se mergea allí,
 
 ### Desarrollo local (`docker-compose.yml`)
 
-```
+```yaml
   Almacenes de datos  postgres        redis         clickhouse
                           │             │               │
   Init jobs           migrate (Prisma)         migrate-ch (ClickHouse)
@@ -54,7 +54,7 @@ El fork tiene su propio pipeline en GitHub Actions. Cuando algo se mergea allí,
 
 ### Kubernetes (Minikube en local, EKS en producción)
 
-```
+```yaml
   GitOps               ArgoCD
                             │
                             ▼ sincroniza todo lo de abajo
@@ -76,7 +76,7 @@ El fork tiene su propio pipeline en GitHub Actions. Cuando algo se mergea allí,
 
 ### CI/CD
 
-```
+```yaml
   Este repo (infra)
     push / PR              ──►  ci-validate.yml
                                   ├─ render de kustomize + validación de esquemas
@@ -100,7 +100,7 @@ El fork tiene su propio pipeline en GitHub Actions. Cuando algo se mergea allí,
 
 ### Terraform
 
-```
+```yaml
   modules/
     backup-storage     S3 bucket + Secrets Manager   (compartido)
     iam-user           IAM User + Access Key         (staging / LocalStack)
@@ -139,6 +139,7 @@ El fork tiene su propio pipeline en GitHub Actions. Cuando algo se mergea allí,
 ```
 Project-DevOps/
 ├── .github/
+│   ├── dependabot.yml              # actualizaciones semanales de GitHub Actions y providers de Terraform
 │   └── workflows/
 │       ├── ci-validate.yml         # gate de PR/push (kustomize, kube-linter, gitleaks)
 │       └── cd-update-tags.yml      # bump de tag GitOps (disparado por el fork de la app)
