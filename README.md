@@ -100,7 +100,7 @@ El fork tiene su propio pipeline en GitHub Actions. Cuando algo se mergea allí,
 
 ### Terraform
 
-```
+```yaml
   modules/
     backup-storage     S3 bucket + Secrets Manager   (compartido)
     iam-user           IAM User + Access Key         (staging / LocalStack)
@@ -139,6 +139,7 @@ El fork tiene su propio pipeline en GitHub Actions. Cuando algo se mergea allí,
 ```
 Project-DevOps/
 ├── .github/
+│   ├── dependabot.yml              # actualizaciones semanales de GitHub Actions y providers de Terraform
 │   └── workflows/
 │       ├── ci-validate.yml         # gate de PR/push (kustomize, kube-linter, gitleaks)
 │       └── cd-update-tags.yml      # bump de tag GitOps (disparado por el fork de la app)
