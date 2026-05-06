@@ -15,7 +15,7 @@ spec:
   project: openpanel
   source:
     repoURL: https://github.com/RubenLopSol/Project-DevOps.git
-    targetRevision: release/main-5faadfb
+    targetRevision: release/main-89dcfd2
     # Set by overlays/*/argocd/patches/app-env.yaml 
     path: PLACEHOLDER
   destination:

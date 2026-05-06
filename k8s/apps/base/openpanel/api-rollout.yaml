@@ -60,7 +60,7 @@ spec:
         workload: app
       containers:
         - name: api
-          image: ghcr.io/rubenlopsol/openpanel-api:main-5faadfb
+          image: ghcr.io/rubenlopsol/openpanel-api:main-89dcfd2
           command: ["node", "dist/index.js"]
           ports:
             - containerPort: 3000
