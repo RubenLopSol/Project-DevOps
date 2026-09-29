@@ -748,6 +748,28 @@ Las operaciones de restauración se realizan utilizando:
 
 Velero restaura los recursos de Kubernetes almacenados en la copia de seguridad, mientras que las copias de seguridad de bases de datos pueden restaurarse por separado cuando sea necesario.
 
+En el caso de ClickHouse, el backup nativo se crea primero dentro del pod con `BACKUP DATABASE ... TO File(...)` y después se exporta al host mediante `kubectl cp`. Esto evita que la única copia quede dentro del contenedor/PVC y se pierda si el pod desaparece o el volumen se corrompe.
+
+---
+
+### Smoke Tests Post-Despliegue
+
+Se añadió una primera capa de smoke tests post-despliegue para validar readiness de workloads y disponibilidad básica de API, dashboard y Prometheus.
+
+Estos smoke tests comprueban:
+
+- Herramientas necesarias disponibles (`kubectl` y `curl`)
+- Pods principales de OpenPanel en estado `Ready`
+- Health endpoint de la API mediante el Service de Kubernetes
+- Respuesta HTTP del dashboard mediante el Service de Kubernetes
+- Readiness de Prometheus mediante el Service de Kubernetes
+
+Ejecución:
+
+```bash
+./scripts/smoke-tests.sh
+```
+
 ---
 
 ### Recuperación ante Desastres
