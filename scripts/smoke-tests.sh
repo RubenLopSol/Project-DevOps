@@ -4,6 +4,12 @@ set -euo pipefail
 # Smoke tests for the deployed OpenPanel stack.
 # These checks are intentionally small: they prove that the GitOps deployment
 # reconciled, the API is reachable, the dashboard responds, and monitoring is up.
+# Smoke checks:
+# - Required CLI tools: kubectl and curl
+# - Main OpenPanel pods are Ready
+# - API health endpoint responds through the Kubernetes Service
+# - Dashboard responds through the Kubernetes Service
+# - Prometheus readiness endpoint responds through the Kubernetes Service
 
 NAMESPACE="${NAMESPACE:-openpanel}"
 OBS_NAMESPACE="${OBS_NAMESPACE:-observability}"
