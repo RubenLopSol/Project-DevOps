@@ -129,11 +129,27 @@ case "${ACTION}" in
     # Flush in-memory data to disk before snapshotting
     kubectl exec -n "${NAMESPACE}" "${CH_POD}" -- \
       clickhouse-client --query "SYSTEM FLUSH LOGS"
-    # Native ClickHouse backup to a file inside the pod
+    # Native ClickHouse backup to a file inside the pod, then copy it out.
+    # Keeping the only copy inside the container/PVC is not enough for DR:
+    # if the pod is removed and the volume is lost or corrupted, the backup
+    # disappears with it.
     kubectl exec -n "${NAMESPACE}" "${CH_POD}" -- \
       clickhouse-client --query \
       "BACKUP DATABASE openpanel TO File('${CH_BACKUP_NAME}.zip')"
-    success "ClickHouse backup saved inside pod: ${BOLD}${CH_BACKUP_NAME}.zip${RESET}"
+
+    CH_BACKUP_PATH=$(kubectl exec -n "${NAMESPACE}" "${CH_POD}" -- \
+    find /var/lib/clickhouse -name "${CH_BACKUP_NAME}.zip" -print -quit)
+
+    if [ -z "${CH_BACKUP_PATH}" ]; then
+    error "ClickHouse backup file was created but could not be found inside the pod"
+    exit 1
+    fi
+
+    kubectl cp \
+    "${NAMESPACE}/${CH_POD}:${CH_BACKUP_PATH}" \
+    "./${CH_BACKUP_NAME}.zip"
+
+    success "ClickHouse backup exported: ${BOLD}${CH_BACKUP_NAME}.zip${RESET}"
 
     echo ""
     success "All database backups complete"
